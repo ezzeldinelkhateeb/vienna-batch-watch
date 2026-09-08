@@ -5,14 +5,14 @@
 -- ==============================================================================
 
 -- 1. Enums
-DO  BEGIN
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
     CREATE TYPE public.app_role AS ENUM ('admin', 'member');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'qc_status') THEN
     CREATE TYPE public.qc_status AS ENUM ('quarantine', 'approved', 'rejected', 'conditional');
   END IF;
-END ;
+END $$;
 
 -- 2. Profiles Table
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -47,9 +47,9 @@ CREATE POLICY "roles readable by authenticated" ON public.user_roles FOR SELECT 
 
 -- 4. Helper Function: has_role
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role public.app_role)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS 
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role);
-;
+$$;
 
 -- 5. Items (Raw Materials & Batches) Table
 CREATE TABLE IF NOT EXISTS public.items (
@@ -151,14 +151,14 @@ DROP POLICY IF EXISTS "log read" ON public.notification_log;
 CREATE POLICY "log read" ON public.notification_log FOR SELECT TO authenticated USING (true);
 
 -- 8. Triggers
-CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS 
-BEGIN NEW.updated_at = now(); RETURN NEW; END; ;
+CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 
 DROP TRIGGER IF EXISTS items_updated_at ON public.items;
 CREATE TRIGGER items_updated_at BEFORE UPDATE ON public.items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- Automatically assign the very first registered user as 'admin'
-CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS 
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE user_count integer;
 BEGIN
   INSERT INTO public.profiles (id, email) VALUES (NEW.id, NEW.email) ON CONFLICT (id) DO NOTHING;
@@ -167,7 +167,7 @@ BEGIN
   VALUES (NEW.id, CASE WHEN user_count = 0 THEN 'admin'::public.app_role ELSE 'member'::public.app_role END)
   ON CONFLICT DO NOTHING;
   RETURN NEW;
-END; ;
+END; $$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
