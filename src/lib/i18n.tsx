@@ -127,6 +127,30 @@ const en: Dict = {
   adminDeleteOnly: "Only administrators can delete raw material batches.",
   loginAdminContact: "Need access? Please contact your system administrator at Vienna.",
   allQcStatuses: "All QC statuses",
+
+  // Phase 2: Barcode, Mobile Cards, Reports & COA
+  scanBarcode: "Scan Barcode / QR",
+  cameraScan: "Camera Scanner",
+  cameraInstruction: "Point your camera at the raw material barcode or QR code",
+  stopCamera: "Close Camera",
+  barcodeDetected: "Barcode detected!",
+  cameraError: "Unable to access camera. Please check browser permissions.",
+  manualCodeInput: "Or type code manually",
+  submitCode: "Apply Code",
+  viewMode: "View",
+  viewTable: "Table",
+  viewCards: "Cards",
+  printQcReport: "Print QC Report",
+  print: "Print / Save PDF",
+  close: "Close",
+  coaNumber: "COA Reference #",
+  qcReportTitle: "Quality Assurance & Batch Inspection Report",
+  preparedBy: "Prepared by (Storekeeper)",
+  inspectedBy: "Inspected by (QC Inspector)",
+  approvedBy: "Approved by (QA Manager)",
+  signature: "Signature & Date",
+  reportDate: "Report Date",
+  officialStamp: "Vienna Quality Assurance Stamp",
 };
 
 const ar: Dict = {
@@ -245,6 +269,30 @@ const ar: Dict = {
   adminDeleteOnly: "المسؤولون فقط يمكنهم حذف دفعات المواد الخام.",
   loginAdminContact: "تحتاج إلى صلاحية وصول؟ يرجى التواصل مع مسؤول النظام في شركة فينا.",
   allQcStatuses: "كل حالات الجودة",
+
+  // Phase 2: Barcode, Mobile Cards, Reports & COA
+  scanBarcode: "مسح باركود / QR",
+  cameraScan: "ماسح الكاميرا",
+  cameraInstruction: "وجّه الكاميرا نحو باركود الصنف أو رمز QR",
+  stopCamera: "إغلاق الكاميرا",
+  barcodeDetected: "تم التقاط الباركود!",
+  cameraError: "تعذر فتح الكاميرا. يرجى السماح بالوصول للكاميرا من المتصفح.",
+  manualCodeInput: "أو اكتب الكود يدوياً",
+  submitCode: "تطبيق الكود",
+  viewMode: "طريقة العرض",
+  viewTable: "جدول",
+  viewCards: "بطاقات",
+  printQcReport: "طباعة تقرير الجودة",
+  print: "طباعة / حفظ PDF",
+  close: "إغلاق",
+  coaNumber: "رقم شهادة التحليل (COA)",
+  qcReportTitle: "تقرير فحص واعتماد جودة المواد الخام",
+  preparedBy: "إعداد: أمين المخزن",
+  inspectedBy: "فحص: مهندس الجودة",
+  approvedBy: "اعتماد: مدير توكيد الجودة",
+  signature: "التوقيع والتاريخ",
+  reportDate: "تاريخ التقرير",
+  officialStamp: "ختم توكيد الجودة - شركة فينا",
 };
 
 const dicts: Record<Lang, Dict> = { ar, en };

@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ImageIcon, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Download,
+  ImageIcon,
+  LayoutGrid,
+  List,
+  Pencil,
+  Plus,
+  Printer,
+  QrCode,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -20,6 +30,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { StatusLegend } from "@/components/StatusLegend";
 import { StatusPill, STATUS_LABEL_KEY, QcBadge, type QcStatusType } from "@/components/StatusPill";
 import { ItemFormDialog, type ItemRow } from "@/components/ItemFormDialog";
+import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
+import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,6 +71,9 @@ function InventoryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -190,12 +205,24 @@ function InventoryPage() {
         {thresholds && <StatusLegend thresholds={thresholds} />}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Input
-            placeholder={t("search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="sm:max-w-xs"
-          />
+          <div className="flex gap-2 w-full sm:max-w-xs">
+            <Input
+              placeholder={t("search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title={t("scanBarcode")}
+              onClick={() => setScannerOpen(true)}
+            >
+              <QrCode className="size-4 text-brand" />
+            </Button>
+          </div>
+
           <Select
             value={statusFilter}
             onValueChange={(v) => setStatusFilter(v as "all" | Status)}
@@ -212,6 +239,7 @@ function InventoryPage() {
               ))}
             </SelectContent>
           </Select>
+
           <Select
             value={qcFilter}
             onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}
@@ -227,11 +255,40 @@ function InventoryPage() {
               <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex gap-2 sm:ms-auto">
+
+          <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
+            {/* View Mode Switcher */}
+            <div className="flex items-center rounded-lg border bg-muted/40 p-0.5">
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8"
+                title={t("viewTable")}
+                onClick={() => setViewMode("table")}
+              >
+                <List className="size-4" />
+              </Button>
+              <Button
+                variant={viewMode === "cards" ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8"
+                title={t("viewCards")}
+                onClick={() => setViewMode("cards")}
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+            </div>
+
+            <Button variant="outline" onClick={() => setPrintOpen(true)}>
+              <Printer className="size-4" />
+              <span className="hidden lg:inline">{t("printQcReport")}</span>
+            </Button>
+
             <Button variant="outline" onClick={exportCsv}>
               <Download className="size-4" />
-              {t("exportCsv")}
+              <span className="hidden sm:inline">{t("exportCsv")}</span>
             </Button>
+
             <Button
               onClick={() => {
                 setEditing(null);
@@ -244,16 +301,119 @@ function InventoryPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
-          {items.isLoading ? (
-            <p className="p-6 text-sm text-muted-foreground">{t("loading")}</p>
-          ) : items.isError ? (
-            <p className="p-6 text-sm text-destructive">{t("errGeneric")}</p>
-          ) : rows.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              {(items.data ?? []).length === 0 ? t("noItems") : t("noResults")}
-            </p>
-          ) : (
+        {items.isLoading ? (
+          <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+            {t("loading")}
+          </div>
+        ) : items.isError ? (
+          <div className="rounded-xl border bg-card p-8 text-center text-sm text-destructive shadow-sm">
+            {t("errGeneric")}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+            {(items.data ?? []).length === 0 ? t("noItems") : t("noResults")}
+          </div>
+        ) : viewMode === "cards" ? (
+          /* Cards View (Mobile & Tablet Friendly) */
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map(({ item, days, status }) => {
+              const url = item.photo_path ? photoUrls.data?.[item.photo_path] : undefined;
+              return (
+                <div
+                  key={item.id}
+                  className="relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md"
+                  style={{ borderTop: `4px solid var(--brand)` }}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-mono text-xs font-semibold text-muted-foreground">
+                          {item.item_code || t("notSet")}
+                        </span>
+                        <h2 className="text-base font-semibold text-cocoa leading-tight">{item.name}</h2>
+                        <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
+                      </div>
+                      {url ? (
+                        <button
+                          type="button"
+                          onClick={() => setLightbox(url)}
+                          className="size-12 shrink-0 overflow-hidden rounded-lg border"
+                        >
+                          <img src={url} alt={item.name} className="size-full object-cover" />
+                        </button>
+                      ) : (
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border bg-muted">
+                          <ImageIcon className="size-5 text-muted-foreground/60" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <StatusPill status={status} />
+                      <QcBadge status={item.qc_status} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block">{t("expiryDate")}</span>
+                        <span className="font-medium font-mono text-foreground">{item.expiry_date}</span>
+                        <span className="block text-[10px] text-muted-foreground">{countdownText(days, t)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block">{t("quantity")}</span>
+                        <span className="font-medium font-mono text-foreground">
+                          {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}` : "—"}
+                        </span>
+                        {item.storage_location && (
+                          <span className="block text-[10px] text-muted-foreground truncate">
+                            📍 {item.storage_location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {(item.qc_notes || item.notes) && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {item.qc_notes || item.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-end gap-1 border-t pt-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1 text-xs"
+                      onClick={() => {
+                        setEditing(item);
+                        setDialogOpen(true);
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                      {t("edit")}
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 text-xs text-destructive hover:text-destructive"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                          if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                        {t("delete")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Table View */
+          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-muted/60 text-start">
                 <tr>
@@ -280,96 +440,108 @@ function InventoryPage() {
               </thead>
               <tbody>
                 {rows.map(({ item, days, status }) => {
-                  const url = item.photo_path
-                    ? photoUrls.data?.[item.photo_path]
-                    : undefined;
+                  const url = item.photo_path ? photoUrls.data?.[item.photo_path] : undefined;
                   return (
-                  <tr
-                    key={item.id}
-                    className="border-t"
-                    style={{ backgroundColor: STATUS_TINT[status] }}
-                  >
-                    <td className="px-3 py-2">
-                      <StatusPill status={status} />
-                    </td>
-                    <td className="px-3 py-2">
-                      <QcBadge status={item.qc_status} />
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {item.item_code || t("notSet")}
-                    </td>
-                    <td className="px-3 py-2">
-                      {url ? (
-                        <button
-                          type="button"
-                          aria-label={t("viewPhoto")}
-                          onClick={() => setLightbox(url)}
-                          className="size-10 overflow-hidden rounded-md border"
-                        >
-                          <img
-                            src={url}
-                            alt={item.name}
-                            className="size-full object-cover"
-                            loading="lazy"
-                          />
-                        </button>
-                      ) : (
-                        <div className="flex size-10 items-center justify-center rounded-md border bg-muted">
-                          <ImageIcon className="size-4 text-muted-foreground" />
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 font-medium">{item.name}</td>
-                    <td className="px-3 py-2">{item.supplier || "—"}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {item.storage_location || "—"}
-                    </td>
+                    <tr
+                      key={item.id}
+                      className="border-t"
+                      style={{ backgroundColor: STATUS_TINT[status] }}
+                    >
+                      <td className="px-3 py-2">
+                        <StatusPill status={status} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <QcBadge status={item.qc_status} />
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {item.item_code || t("notSet")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {url ? (
+                          <button
+                            type="button"
+                            aria-label={t("viewPhoto")}
+                            onClick={() => setLightbox(url)}
+                            className="size-10 overflow-hidden rounded-md border"
+                          >
+                            <img
+                              src={url}
+                              alt={item.name}
+                              className="size-full object-cover"
+                              loading="lazy"
+                            />
+                          </button>
+                        ) : (
+                          <div className="flex size-10 items-center justify-center rounded-md border bg-muted">
+                            <ImageIcon className="size-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-medium">{item.name}</td>
+                      <td className="px-3 py-2">{item.supplier || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {item.storage_location || "—"}
+                      </td>
 
-                    <td className="px-3 py-2">
-                      {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "—"}
-                    </td>
-                    <td className="px-3 py-2">{item.production_date || "—"}</td>
-                    <td className="px-3 py-2">{item.expiry_date}</td>
-                    <td className="px-3 py-2">{countdownText(days, t)}</td>
-                    <td className="max-w-[16rem] px-3 py-2 text-muted-foreground">
-                      {item.notes || "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label={t("edit")}
-                          onClick={() => {
-                            setEditing(item);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        {isAdmin && (
+                      <td className="px-3 py-2">
+                        {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "—"}
+                      </td>
+                      <td className="px-3 py-2">{item.production_date || "—"}</td>
+                      <td className="px-3 py-2">{item.expiry_date}</td>
+                      <td className="px-3 py-2">{countdownText(days, t)}</td>
+                      <td className="max-w-[16rem] px-3 py-2 text-muted-foreground">
+                        {item.notes || "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-1">
                           <Button
                             size="icon"
                             variant="ghost"
-                            aria-label={t("delete")}
-                            disabled={remove.isPending}
-                            title={t("delete")}
+                            aria-label={t("edit")}
                             onClick={() => {
-                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                              setEditing(item);
+                              setDialogOpen(true);
                             }}
                           >
-                            <Trash2 className="size-4 text-destructive" />
+                            <Pencil className="size-4" />
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {isAdmin && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={t("delete")}
+                              disabled={remove.isPending}
+                              title={t("delete")}
+                              onClick={() => {
+                                if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                              }}
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
       </main>
+
+      <BarcodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onDetected={(code) => setSearch(code)}
+      />
+
+      <QcPrintReportDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        items={rows.map((r) => r.item)}
+        thresholds={thresholds}
+      />
 
       <ItemFormDialog
         open={dialogOpen}

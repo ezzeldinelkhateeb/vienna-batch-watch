@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, X } from "lucide-react";
+import { ImageIcon, QrCode, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -9,6 +9,7 @@ import {
   signedPhotoUrl,
   uploadItemPhoto,
 } from "@/lib/photos";
+import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +46,7 @@ export interface ItemRow {
   qc_status?: QcStatus | null;
   storage_location?: string | null;
   qc_notes?: string | null;
+  coa_number?: string | null;
 }
 
 interface FormState {
@@ -59,6 +61,7 @@ interface FormState {
   qc_status: QcStatus;
   storage_location: string;
   qc_notes: string;
+  coa_number: string;
 }
 
 const empty: FormState = {
@@ -73,6 +76,7 @@ const empty: FormState = {
   qc_status: "quarantine",
   storage_location: "",
   qc_notes: "",
+  coa_number: "",
 };
 
 export function ItemFormDialog({
@@ -90,6 +94,7 @@ export function ItemFormDialog({
   const [form, setForm] = useState<FormState>(empty);
   const [busy, setBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // photo state
   const fileInput = useRef<HTMLInputElement>(null);
@@ -115,6 +120,7 @@ export function ItemFormDialog({
             qc_status: item.qc_status ?? "quarantine",
             storage_location: item.storage_location ?? "",
             qc_notes: item.qc_notes ?? "",
+            coa_number: item.coa_number ?? "",
           }
         : empty,
     );
@@ -192,6 +198,7 @@ export function ItemFormDialog({
         qc_status: form.qc_status,
         storage_location: form.storage_location.trim() || null,
         qc_notes: form.qc_notes.trim() || null,
+        coa_number: form.coa_number.trim() || null,
       };
 
       if (item) {
@@ -240,25 +247,47 @@ export function ItemFormDialog({
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="item_code">{t("itemCode")} *</Label>
-            <Input
-              id="item_code"
-              value={form.item_code}
-              onChange={(e) => {
-                setCodeError(null);
-                set("item_code")(e);
-              }}
-              aria-invalid={codeError ? true : undefined}
-              required
-            />
+            <div className="flex gap-2">
+              <Input
+                id="item_code"
+                value={form.item_code}
+                onChange={(e) => {
+                  setCodeError(null);
+                  set("item_code")(e);
+                }}
+                aria-invalid={codeError ? true : undefined}
+                required
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title={t("scanBarcode")}
+                onClick={() => setScannerOpen(true)}
+              >
+                <QrCode className="size-4 text-brand" />
+              </Button>
+            </div>
             {codeError && <p className="text-xs text-destructive">{codeError}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">{t("name")} *</Label>
             <Input id="name" value={form.name} onChange={set("name")} required />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="supplier">{t("supplier")}</Label>
-            <Input id="supplier" value={form.supplier} onChange={set("supplier")} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="supplier">{t("supplier")}</Label>
+              <Input id="supplier" value={form.supplier} onChange={set("supplier")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="coa_number">{t("coaNumber")}</Label>
+              <Input
+                id="coa_number"
+                placeholder="e.g. COA-2026-881"
+                value={form.coa_number}
+                onChange={set("coa_number")}
+              />
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -382,6 +411,15 @@ export function ItemFormDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        <BarcodeScannerDialog
+          open={scannerOpen}
+          onOpenChange={setScannerOpen}
+          onDetected={(code) => {
+            setCodeError(null);
+            setForm((f) => ({ ...f, item_code: code }));
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
