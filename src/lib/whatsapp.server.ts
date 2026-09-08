@@ -36,6 +36,7 @@ export async function sendWhatsApp(
 export function buildAlertMessage(
   item: {
     item_code?: string | null;
+    batch_number?: string | null;
     name: string;
     supplier: string | null;
     quantity: number | null;
@@ -87,7 +88,7 @@ export function buildAlertMessage(
   const code = item.item_code ? item.item_code : "غير مسجل";
   const location = item.storage_location ? `📍 *موقع التخزين:* ${item.storage_location}` : "📍 *موقع التخزين:* غير محدد";
 
-  return [
+  const lines = [
     `🍫 *VIENNA HIGH QUALITY CHOCOLATE* 🍫`,
     `*إدارة توكيد ومراقبة الجودة (QA/QC Department)*`,
     `━━━━━━━━━━━━━━━━━━━━`,
@@ -95,7 +96,8 @@ export function buildAlertMessage(
     `*التوجيه:* ${currentStatus.urgency}`,
     `━━━━━━━━━━━━━━━━━━━━`,
     `📦 *اسم المادة الخام:* ${item.name}`,
-    `🏷️ *كود الصنف / التشغيلة:* ${code}`,
+    `🏷️ *كود الصنف:* ${code}`,
+    item.batch_number ? `🔢 *رقم التشغيلة (Batch #):* ${item.batch_number}` : null,
     `🏢 *المورد:* ${item.supplier ?? "—"}`,
     `⚖️ *الكمية الحالية:* ${qtyStr}`,
     location,
@@ -109,5 +111,7 @@ export function buildAlertMessage(
     `• مراجعة درجات حرارة ورطوبة غرف التخزين باستمرار.`,
     `━━━━━━━━━━━━━━━━━━━━`,
     `_نظام Vienna Batch Watch الذكي_`,
-  ].join("\n");
+  ];
+
+  return lines.filter(Boolean).join("\n");
 }

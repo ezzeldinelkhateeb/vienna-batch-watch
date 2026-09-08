@@ -34,6 +34,7 @@ export type QcStatus = "quarantine" | "approved" | "rejected" | "conditional";
 export interface ItemRow {
   id: string;
   item_code: string | null;
+  batch_number?: string | null;
   name: string;
   supplier: string | null;
   production_date: string | null;
@@ -51,6 +52,7 @@ export interface ItemRow {
 
 interface FormState {
   item_code: string;
+  batch_number: string;
   name: string;
   supplier: string;
   production_date: string;
@@ -66,6 +68,7 @@ interface FormState {
 
 const empty: FormState = {
   item_code: "",
+  batch_number: "",
   name: "",
   supplier: "",
   production_date: "",
@@ -110,6 +113,7 @@ export function ItemFormDialog({
       item
         ? {
             item_code: item.item_code ?? "",
+            batch_number: item.batch_number ?? "",
             name: item.name,
             supplier: item.supplier ?? "",
             production_date: item.production_date ?? "",
@@ -187,6 +191,7 @@ export function ItemFormDialog({
 
       const payload = {
         item_code: form.item_code.trim(),
+        batch_number: form.batch_number.trim() || null,
         name: form.name.trim(),
         supplier: form.supplier.trim() || null,
         production_date: form.production_date || null,
@@ -245,30 +250,42 @@ export function ItemFormDialog({
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="item_code">{t("itemCode")} *</Label>
-            <div className="flex gap-2">
-              <Input
-                id="item_code"
-                value={form.item_code}
-                onChange={(e) => {
-                  setCodeError(null);
-                  set("item_code")(e);
-                }}
-                aria-invalid={codeError ? true : undefined}
-                required
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title={t("scanBarcode")}
-                onClick={() => setScannerOpen(true)}
-              >
-                <QrCode className="size-4 text-brand" />
-              </Button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="item_code">{t("itemCode")} *</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="item_code"
+                  value={form.item_code}
+                  onChange={(e) => {
+                    setCodeError(null);
+                    set("item_code")(e);
+                  }}
+                  aria-invalid={codeError ? true : undefined}
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title={t("scanBarcode")}
+                  onClick={() => setScannerOpen(true)}
+                >
+                  <QrCode className="size-4 text-brand" />
+                </Button>
+              </div>
+              {codeError && <p className="text-xs text-destructive">{codeError}</p>}
             </div>
-            {codeError && <p className="text-xs text-destructive">{codeError}</p>}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="batch_number">{t("batchNumber")}</Label>
+              <Input
+                id="batch_number"
+                placeholder="e.g. BATCH-2026-001"
+                value={form.batch_number}
+                onChange={set("batch_number")}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">{t("name")} *</Label>

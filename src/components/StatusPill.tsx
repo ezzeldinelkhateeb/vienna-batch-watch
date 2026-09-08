@@ -50,7 +50,7 @@ export const QC_CONFIG: Record<
   },
 };
 
-export function QcBadge({ status }: { status?: QcStatusType | null }) {
+export function QcBadge({ status }: { status?: QcStatusType | null | undefined }) {
   const { t } = useI18n();
   const current = status ?? "quarantine";
   const cfg = QC_CONFIG[current] ?? QC_CONFIG.quarantine;

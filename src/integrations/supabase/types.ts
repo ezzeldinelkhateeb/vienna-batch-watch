@@ -46,6 +46,7 @@ export type Database = {
       }
       items: {
         Row: {
+          batch_number: string | null
           coa_number: string | null
           created_at: string
           created_by: string | null
@@ -68,6 +69,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch_number?: string | null
           coa_number?: string | null
           created_at?: string
           created_by?: string | null
@@ -90,6 +92,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch_number?: string | null
           coa_number?: string | null
           created_at?: string
           created_by?: string | null
@@ -211,6 +214,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "member"
+      qc_status: "quarantine" | "approved" | "rejected" | "conditional"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -339,6 +343,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "member"],
+      qc_status: ["quarantine", "approved", "rejected", "conditional"],
     },
   },
 } as const

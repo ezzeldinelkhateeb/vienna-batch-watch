@@ -121,6 +121,7 @@ function InventoryPage() {
         (qcFilter === "all" || (r.item.qc_status ?? "quarantine") === qcFilter) &&
         (q === "" ||
           (r.item.item_code ?? "").toLowerCase().includes(q) ||
+          (r.item.batch_number ?? "").toLowerCase().includes(q) ||
           r.item.name.toLowerCase().includes(q) ||
           (r.item.supplier ?? "").toLowerCase().includes(q) ||
           (r.item.storage_location ?? "").toLowerCase().includes(q)),
@@ -144,6 +145,7 @@ function InventoryPage() {
   const exportCsv = () => {
     const header = [
       t("itemCode"),
+      t("batchNumber"),
       t("name"),
       t("supplier"),
       t("qcStatus"),
@@ -160,6 +162,7 @@ function InventoryPage() {
     const lines = rows.map((r) =>
       [
         r.item.item_code ?? "",
+        r.item.batch_number ?? "",
         r.item.name,
         r.item.supplier ?? "",
         t((r.item.qc_status ?? "quarantine") as never),
@@ -327,9 +330,16 @@ function InventoryPage() {
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="font-mono text-xs font-semibold text-muted-foreground">
-                          {item.item_code || t("notSet")}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+                          <span className="font-semibold text-muted-foreground">
+                            {item.item_code || t("notSet")}
+                          </span>
+                          {item.batch_number && (
+                            <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-medium text-brand">
+                              #{item.batch_number}
+                            </span>
+                          )}
+                        </div>
                         <h2 className="text-base font-semibold text-cocoa leading-tight">{item.name}</h2>
                         <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
                       </div>
@@ -421,6 +431,7 @@ function InventoryPage() {
                     "status",
                     "qcStatus",
                     "itemCode",
+                    "batchNumber",
                     "photo",
                     "name",
                     "supplier",
@@ -455,6 +466,15 @@ function InventoryPage() {
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">
                         {item.item_code || t("notSet")}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {item.batch_number ? (
+                          <span className="rounded bg-brand/10 px-1.5 py-0.5 font-medium text-brand">
+                            {item.batch_number}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {url ? (

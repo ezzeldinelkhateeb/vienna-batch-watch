@@ -25,6 +25,8 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
   const [hasCamera, setHasCamera] = useState(true);
   const [scanning, setScanning] = useState(false);
 
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!open) {
       stopCamera();
@@ -58,21 +60,19 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
           const detector = new (window as any).BarcodeDetector({
             formats: ["code_128", "code_39", "ean_13", "ean_8", "qr_code", "upc_a"],
           });
-          const interval = setInterval(async () => {
+          intervalRef.current = setInterval(async () => {
             if (!videoRef.current || videoRef.current.readyState < 2) return;
             try {
               const barcodes = await detector.detect(videoRef.current);
               if (barcodes.length > 0 && barcodes[0]?.rawValue) {
                 const detected = barcodes[0].rawValue.trim();
-                clearInterval(interval);
+                if (intervalRef.current) clearInterval(intervalRef.current);
                 handleSuccess(detected);
               }
             } catch {
               // Ignore frame detection glitch
             }
           }, 400);
-
-          return () => clearInterval(interval);
         } catch {
           // BarcodeDetector failed, keep camera active for visual framing
         }
@@ -84,6 +84,10 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
   };
 
   const stopCamera = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;

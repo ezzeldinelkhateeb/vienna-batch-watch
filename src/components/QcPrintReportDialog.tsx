@@ -16,7 +16,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   items: ItemRow[];
-  thresholds?: Thresholds;
+  thresholds?: Thresholds | undefined;
 }
 
 export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: Props) {
@@ -103,6 +103,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                 <tr>
                   <th className="p-2 text-start">#</th>
                   <th className="p-2 text-start">{t("itemCode")}</th>
+                  <th className="p-2 text-start">{t("batchNumber")}</th>
                   <th className="p-2 text-start">{t("name")}</th>
                   <th className="p-2 text-start">{t("supplier")}</th>
                   <th className="p-2 text-start">{t("qcStatus")}</th>
@@ -120,6 +121,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                     <tr key={it.id} className="odd:bg-background even:bg-muted/20">
                       <td className="p-2 font-mono">{idx + 1}</td>
                       <td className="p-2 font-mono font-medium">{it.item_code || "—"}</td>
+                      <td className="p-2 font-mono text-muted-foreground">{it.batch_number || "—"}</td>
                       <td className="p-2 font-medium">{it.name}</td>
                       <td className="p-2">{it.supplier || "—"}</td>
                       <td className="p-2 font-semibold">

@@ -95,6 +95,7 @@ const en: Dict = {
   noLogs: "No alerts have been sent yet.",
 
   itemCode: "Item Code",
+  batchNumber: "Batch Number",
   photoOptional: "Photo (optional)",
   photo: "Photo",
   removePhoto: "Remove photo",
@@ -113,7 +114,7 @@ const en: Dict = {
   errGeneric: "Something went wrong. Please try again.",
   errMissingWhatsapp: "Add your WhatsApp number and API key first.",
   totalItems: "Total items",
-  search: "Search by code, name or supplier",
+  search: "Search by code, batch #, name or supplier",
 
   // Quality Control (QC)
   qcStatus: "QC Status",
@@ -194,7 +195,7 @@ const ar: Dict = {
   noItems: "لا توجد أصناف بعد. أضف أول مادة خام.",
   noResults: "لا توجد أصناف مطابقة للبحث.",
   searchLegacy: "بحث",
-  search: "ابحث بالكود أو الاسم أو المورد",
+  search: "ابحث بالكود، رقم التشغيلة، الاسم أو المورد",
   allStatuses: "كل الحالات",
   exportCsv: "تصدير Excel/CSV",
 
@@ -238,6 +239,7 @@ const ar: Dict = {
   noLogs: "لم يتم إرسال أي تنبيهات بعد.",
 
   itemCode: "كود الصنف",
+  batchNumber: "رقم التشغيلة (Batch #)",
   photoOptional: "الصورة (اختياري)",
   photo: "الصورة",
   removePhoto: "إزالة الصورة",
