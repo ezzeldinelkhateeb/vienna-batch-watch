@@ -35,31 +35,79 @@ export async function sendWhatsApp(
 
 export function buildAlertMessage(
   item: {
+    item_code?: string | null;
     name: string;
     supplier: string | null;
     quantity: number | null;
     unit: string | null;
     expiry_date: string;
+    storage_location?: string | null;
+    qc_status?: string | null;
   },
   status: string,
   days: number,
 ): string {
-  const labels: Record<string, string> = {
-    early: "⚠️ Early warning",
-    medium: "🟠 Medium warning",
-    critical: "🔴 CRITICAL warning",
-    expired: "⚫ EXPIRED",
+  const qcLabels: Record<string, string> = {
+    quarantine: "🔒 تحت الحجر (Quarantine)",
+    approved: "✅ مقبول ومعتمد (Approved)",
+    rejected: "❌ مرفوض (Rejected)",
+    conditional: "⚠️ قبول مشروط (Conditional)",
   };
-  const qty =
-    item.quantity != null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "—";
-  const timing = days < 0 ? `Expired ${Math.abs(days)} day(s) ago` : `${days} day(s) remaining`;
+
+  const statusHeaders: Record<string, { badge: string; urgency: string }> = {
+    early: {
+      badge: "🟡 *تنبيه مبكر للصلاحية (Early Warning)*",
+      urgency: "متبقٍ فترة كافية للاستهلاك والتصنيع",
+    },
+    medium: {
+      badge: "🟠 *تحذير متوسط الأهمية (Medium Alert)*",
+      urgency: "يُرجى إعطاء أولوية للصرف في خطط التشغيل",
+    },
+    critical: {
+      badge: "🚨 *إنذار حرج وفوري (CRITICAL ALERT)*",
+      urgency: "إجراء عاجل: أوشكت الصلاحية على النفاد!",
+    },
+    expired: {
+      badge: "⛔ *مادة منتهية الصلاحية (EXPIRED)*",
+      urgency: "يُحظر الصرف تماماً ويجب العزل الفوري في الحجر!",
+    },
+  };
+
+  const currentStatus = statusHeaders[status] ?? {
+    badge: `⚠️ *تنبيه صلاحية (${status})*`,
+    urgency: "يرجى المراجعة الفورية من فريق الجودة",
+  };
+
+  const qtyStr = item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "غير محدد";
+  const countdown = days < 0
+    ? `⛔ منتهي الصلاحية منذ ${Math.abs(days)} يوم`
+    : (days === 0 ? "⚠️ ينتهي اليوم!" : `⏳ متبقٍ: ${days} يوم`);
+
+  const qc = item.qc_status ? (qcLabels[item.qc_status] ?? item.qc_status) : "🔒 تحت الحجر";
+  const code = item.item_code ? item.item_code : "غير مسجل";
+  const location = item.storage_location ? `📍 *موقع التخزين:* ${item.storage_location}` : "📍 *موقع التخزين:* غير محدد";
+
   return [
-    `Vienna Expiry Tracker`,
-    `${labels[status] ?? status}`,
-    `Item: ${item.name}`,
-    `Supplier: ${item.supplier ?? "—"}`,
-    `Quantity: ${qty}`,
-    `Expiry date: ${item.expiry_date}`,
-    timing,
+    `🍫 *VIENNA HIGH QUALITY CHOCOLATE* 🍫`,
+    `*إدارة توكيد ومراقبة الجودة (QA/QC Department)*`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    currentStatus.badge,
+    `*التوجيه:* ${currentStatus.urgency}`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `📦 *اسم المادة الخام:* ${item.name}`,
+    `🏷️ *كود الصنف / التشغيلة:* ${code}`,
+    `🏢 *المورد:* ${item.supplier ?? "—"}`,
+    `⚖️ *الكمية الحالية:* ${qtyStr}`,
+    location,
+    `🛡️ *حالة الجودة:* ${qc}`,
+    `📅 *تاريخ الانتهاء:* ${item.expiry_date}`,
+    `⏰ *الوضع الزمني:* ${countdown}`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `📋 *تعليمات سلامة الغذاء والجودة:*`,
+    `• الالتزام الصارم بقاعدة الصرف (FEFO: الأقرب انتهاءً أولاً).`,
+    `• لا يتم صرف أي شحنة للإنتاج بدون بطاقة اعتماد الجودة.`,
+    `• مراجعة درجات حرارة ورطوبة غرف التخزين باستمرار.`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `_نظام Vienna Batch Watch الذكي_`,
   ].join("\n");
 }

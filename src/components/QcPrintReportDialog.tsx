@@ -133,7 +133,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                         </span>
                       </td>
                       <td className="p-2 whitespace-nowrap">
-                        {it.quantity != null ? ${it.quantity}  : "—"}
+                        {it.quantity != null ? `${it.quantity}` : "—"}
                       </td>
                       <td className="p-2 max-w-[12rem] text-muted-foreground">
                         {it.qc_notes || it.notes || "—"}

@@ -46,6 +46,7 @@ export type Database = {
       }
       items: {
         Row: {
+          coa_number: string | null
           created_at: string
           created_by: string | null
           expiry_date: string
@@ -56,12 +57,18 @@ export type Database = {
           notes: string | null
           photo_path: string | null
           production_date: string | null
+          qc_inspected_at: string | null
+          qc_inspected_by: string | null
+          qc_notes: string | null
+          qc_status: Database["public"]["Enums"]["qc_status"]
           quantity: number | null
+          storage_location: string | null
           supplier: string | null
           unit: string | null
           updated_at: string
         }
         Insert: {
+          coa_number?: string | null
           created_at?: string
           created_by?: string | null
           expiry_date: string
@@ -72,12 +79,18 @@ export type Database = {
           notes?: string | null
           photo_path?: string | null
           production_date?: string | null
+          qc_inspected_at?: string | null
+          qc_inspected_by?: string | null
+          qc_notes?: string | null
+          qc_status?: Database["public"]["Enums"]["qc_status"]
           quantity?: number | null
+          storage_location?: string | null
           supplier?: string | null
           unit?: string | null
           updated_at?: string
         }
         Update: {
+          coa_number?: string | null
           created_at?: string
           created_by?: string | null
           expiry_date?: string
@@ -88,7 +101,12 @@ export type Database = {
           notes?: string | null
           photo_path?: string | null
           production_date?: string | null
+          qc_inspected_at?: string | null
+          qc_inspected_by?: string | null
+          qc_notes?: string | null
+          qc_status?: Database["public"]["Enums"]["qc_status"]
           quantity?: number | null
+          storage_location?: string | null
           supplier?: string | null
           unit?: string | null
           updated_at?: string

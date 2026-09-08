@@ -19,7 +19,7 @@ async function runDailyCheck() {
 
   const { data: items, error } = await supabaseAdmin
     .from("items")
-    .select("id, name, supplier, quantity, unit, expiry_date, last_notified_status")
+    .select("id, item_code, name, supplier, quantity, unit, expiry_date, storage_location, qc_status, last_notified_status")
     .order("expiry_date", { ascending: true });
 
   if (error) throw new Error(error.message);

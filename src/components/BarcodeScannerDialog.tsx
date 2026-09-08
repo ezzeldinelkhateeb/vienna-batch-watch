@@ -93,9 +93,7 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
 
   const handleSuccess = (code: string) => {
     stopCamera();
-    if (navigator.vibrate) navigator.vibrate(100);
-    toast.success(${t("barcodeDetected")}: );
-    onDetected(code);
+    toast.success(`${t("barcodeDetected")}: ${code}`);
     onOpenChange(false);
   };
 
