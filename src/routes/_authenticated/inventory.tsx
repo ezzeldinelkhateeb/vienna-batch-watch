@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,7 +11,15 @@ import {
   Printer,
   QrCode,
   Trash2,
+  Package as PackageIcon,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  AlertOctagon,
+  XCircle,
+  MessageCircle,
 } from "lucide-react";
+import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -32,6 +40,12 @@ import { StatusPill, STATUS_LABEL_KEY, QcBadge, type QcStatusType } from "@/comp
 import { ItemFormDialog, type ItemRow } from "@/components/ItemFormDialog";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
+import {
+  ProductImageViewerDialog,
+  type ProductImageDetails,
+} from "@/components/ProductImageViewerDialog";
+import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -71,12 +85,26 @@ function InventoryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("vienna_view_mode");
+      if (saved === "table" || saved === "cards") return saved;
+      return window.innerWidth < 768 ? "cards" : "table";
+    }
+    return "table";
+  });
   const [scannerOpen, setScannerOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [activeImage, setActiveImage] = useState<ProductImageDetails | null>(null);
+
+  const handleSetViewMode = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vienna_view_mode", mode);
+    }
+  };
 
   const items = useQuery({
     queryKey: ["items"],
@@ -188,24 +216,111 @@ function InventoryPage() {
     URL.revokeObjectURL(url);
   };
 
+  const shareItemOnWhatsApp = (item: ItemRow, status: Status, days: number) => {
+    const text = buildAlertMessage(item, status, days);
+    const targetPhone = settings.data?.whatsapp_phone;
+    const url = buildDirectWhatsAppUrl(targetPhone, text);
+    window.open(url, "_blank");
+  };
+
+  const hasUrgent = counts.expired > 0 || counts.critical > 0;
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={t("totalItems")} value={items.data?.length ?? 0} />
+      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
+        {/* Urgent Expiry Alert Banner */}
+        {hasUrgent && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-950 dark:text-red-200 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white shadow-sm">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-red-950 dark:text-red-100">
+                  {t("urgentExpiryBanner", {
+                    expired: counts.expired,
+                    critical: counts.critical,
+                  })}
+                </p>
+                <p className="text-xs text-red-800/80 dark:text-red-200/80">
+                  {lang === "ar"
+                    ? "يُرجى تطبيق إجراءات الحجر الفوري وقاعدة الصرف (FEFO: الأقرب انتهاءً أولاً) لمنع تلف المواد الخام."
+                    : "Please enforce immediate quarantine and FEFO rules to prevent raw material loss."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-white hover:bg-white/90 text-red-700 border-red-300 text-xs font-semibold shrink-0 shadow-sm"
+                onClick={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
+              >
+                {t("viewUrgentItems")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label={t("totalItems")}
+            value={items.data?.length ?? 0}
+            active={statusFilter === "all" && qcFilter === "all"}
+            onClick={() => {
+              setStatusFilter("all");
+              setQcFilter("all");
+            }}
+          />
           {STATUS_ORDER.map((s) => (
             <StatCard
               key={s}
               label={t(STATUS_LABEL_KEY[s])}
               value={counts[s]}
               tint={STATUS_TINT[s]}
+              active={statusFilter === s}
+              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
             />
           ))}
         </div>
 
         {thresholds && <StatusLegend thresholds={thresholds} />}
+
+        {/* Quick Filter Pills for Instant Mobile & Fast Filtering */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("all");
+              setQcFilter("all");
+            }}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+              statusFilter === "all" && qcFilter === "all"
+                ? "bg-brand text-brand-foreground shadow-sm ring-1 ring-brand"
+                : "bg-card border border-border/80 text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {t("quickFilterAll")} ({items.data?.length ?? 0})
+          </button>
+          {STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all flex items-center gap-1.5 ${
+                statusFilter === s
+                  ? "bg-cocoa text-cream shadow-sm ring-2 ring-brand"
+                  : "bg-card border border-border/80 text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <span className="size-2 rounded-full" style={{ backgroundColor: STATUS_TINT[s] }} />
+              <span>{t(STATUS_LABEL_KEY[s])}</span>
+              <span className="opacity-70 font-mono text-[11px]">({counts[s]})</span>
+            </button>
+          ))}
+        </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex gap-2 w-full sm:max-w-xs">
@@ -267,7 +382,7 @@ function InventoryPage() {
                 size="icon"
                 className="size-8"
                 title={t("viewTable")}
-                onClick={() => setViewMode("table")}
+                onClick={() => handleSetViewMode("table")}
               >
                 <List className="size-4" />
               </Button>
@@ -276,7 +391,7 @@ function InventoryPage() {
                 size="icon"
                 className="size-8"
                 title={t("viewCards")}
-                onClick={() => setViewMode("cards")}
+                onClick={() => handleSetViewMode("cards")}
               >
                 <LayoutGrid className="size-4" />
               </Button>
@@ -343,19 +458,27 @@ function InventoryPage() {
                         <h2 className="text-base font-semibold text-cocoa leading-tight">{item.name}</h2>
                         <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
                       </div>
-                      {url ? (
-                        <button
-                          type="button"
-                          onClick={() => setLightbox(url)}
-                          className="size-12 shrink-0 overflow-hidden rounded-lg border"
-                        >
-                          <img src={url} alt={item.name} className="size-full object-cover" />
-                        </button>
-                      ) : (
-                        <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border bg-muted">
-                          <ImageIcon className="size-5 text-muted-foreground/60" />
-                        </div>
-                      )}
+                      <ProductImageThumbnail
+                        url={url}
+                        name={item.name}
+                        itemCode={item.item_code}
+                        batchNumber={item.batch_number}
+                        size="md"
+                        onClick={() => {
+                          if (url) {
+                            setActiveImage({
+                              url,
+                              name: item.name,
+                              itemCode: item.item_code,
+                              batchNumber: item.batch_number,
+                              supplier: item.supplier,
+                              expiryDate: item.expiry_date,
+                              countdown: countdownText(days, t),
+                              qcStatus: item.qc_status,
+                            });
+                          }
+                        }}
+                      />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -389,33 +512,46 @@ function InventoryPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-end gap-1 border-t pt-2">
+                  <div className="mt-4 flex items-center justify-between gap-1 border-t pt-2">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="gap-1 text-xs"
-                      onClick={() => {
-                        setEditing(item);
-                        setDialogOpen(true);
-                      }}
+                      className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                      title={t("shareViaWhatsApp")}
+                      onClick={() => shareItemOnWhatsApp(item, status, days)}
                     >
-                      <Pencil className="size-3.5" />
-                      {t("edit")}
+                      <MessageCircle className="size-3.5" />
+                      <span>{t("shareViaWhatsApp")}</span>
                     </Button>
-                    {isAdmin && (
+
+                    <div className="flex items-center gap-1">
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="gap-1 text-xs text-destructive hover:text-destructive"
-                        disabled={remove.isPending}
+                        className="gap-1 text-xs"
                         onClick={() => {
-                          if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                          setEditing(item);
+                          setDialogOpen(true);
                         }}
                       >
-                        <Trash2 className="size-3.5" />
-                        {t("delete")}
+                        <Pencil className="size-3.5" />
+                        {t("edit")}
                       </Button>
-                    )}
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1 text-xs text-destructive hover:text-destructive"
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                          {t("delete")}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -477,25 +613,27 @@ function InventoryPage() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        {url ? (
-                          <button
-                            type="button"
-                            aria-label={t("viewPhoto")}
-                            onClick={() => setLightbox(url)}
-                            className="size-10 overflow-hidden rounded-md border"
-                          >
-                            <img
-                              src={url}
-                              alt={item.name}
-                              className="size-full object-cover"
-                              loading="lazy"
-                            />
-                          </button>
-                        ) : (
-                          <div className="flex size-10 items-center justify-center rounded-md border bg-muted">
-                            <ImageIcon className="size-4 text-muted-foreground" />
-                          </div>
-                        )}
+                        <ProductImageThumbnail
+                          url={url}
+                          name={item.name}
+                          itemCode={item.item_code}
+                          batchNumber={item.batch_number}
+                          size="sm"
+                          onClick={() => {
+                            if (url) {
+                              setActiveImage({
+                                url,
+                                name: item.name,
+                                itemCode: item.item_code,
+                                batchNumber: item.batch_number,
+                                supplier: item.supplier,
+                                expiryDate: item.expiry_date,
+                                countdown: countdownText(days, t),
+                                qcStatus: item.qc_status,
+                              });
+                            }
+                          }}
+                        />
                       </td>
                       <td className="px-3 py-2 font-medium">{item.name}</td>
                       <td className="px-3 py-2">{item.supplier || "—"}</td>
@@ -514,6 +652,16 @@ function InventoryPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("shareViaWhatsApp")}
+                            title={t("shareViaWhatsApp")}
+                            className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                            onClick={() => shareItemOnWhatsApp(item, status, days)}
+                          >
+                            <MessageCircle className="size-4" />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -569,6 +717,20 @@ function InventoryPage() {
         item={editing}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ["items"] })}
       />
+
+      <ProductImageViewerDialog
+        open={!!activeImage}
+        onOpenChange={(open) => !open && setActiveImage(null)}
+        item={activeImage}
+      />
+
+      <MobileBottomNav
+        onAddItem={() => {
+          setEditing(null);
+          setDialogOpen(true);
+        }}
+        onScan={() => setScannerOpen(true)}
+      />
     </div>
   );
 }
@@ -577,18 +739,31 @@ function StatCard({
   label,
   value,
   tint,
+  active,
+  onClick,
 }: {
   label: string;
   value: number;
   tint?: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="rounded-xl border bg-card p-3 shadow-sm"
-      style={tint ? { backgroundColor: tint } : undefined}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative flex flex-col justify-between rounded-xl border p-3 text-start transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus:outline-none ${
+        active
+          ? "border-brand ring-2 ring-brand/40 bg-card shadow-sm"
+          : "border-border/80 bg-card hover:border-brand/50"
+      }`}
+      style={tint && !active ? { backgroundColor: tint } : undefined}
     >
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-semibold text-cocoa">{value}</p>
-    </div>
+      <div className="flex items-center justify-between gap-1 w-full">
+        <p className="text-xs text-muted-foreground font-medium truncate">{label}</p>
+        {active && <span className="size-2 rounded-full bg-brand animate-pulse shrink-0" />}
+      </div>
+      <p className="mt-1 text-2xl font-semibold text-cocoa leading-tight">{value}</p>
+    </button>
   );
 }

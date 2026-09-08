@@ -22,7 +22,7 @@ interface TeamMember {
   role: "admin" | "member";
 }
 
-export function TeamManagement({ currentUserId }: { currentUserId?: string }) {
+export function TeamManagement({ currentUserId }: { currentUserId?: string | undefined }) {
   const { lang } = useI18n();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,7 +75,31 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string }) {
 
     setCreating(true);
     try {
-      // Use an isolated client so the active Admin session is not overwritten
+      // 1. Primary method: Direct Database RPC function (Zero emails, Zero rate limits, Instant confirmation)
+      const { data: rpcUserId, error: rpcError } = await supabase.rpc("create_team_member" as never, {
+        _email: email.trim().toLowerCase(),
+        _password: password,
+        _role: role,
+      } as never);
+
+      if (!rpcError) {
+        toast.success(
+          lang === "ar"
+            ? `تم إنشاء حساب ${email} بنجاح كـ (${role === "admin" ? "مدير نظام" : "مسؤول جودة/مخزن"})!`
+            : `Account ${email} created successfully as (${role})!`
+        );
+
+        setEmail("");
+        setPassword("");
+        setRole("member");
+        setOpenAdd(false);
+        void fetchMembers();
+        return;
+      }
+
+      console.warn("RPC create_team_member error, falling back to auth.signUp:", rpcError);
+
+      // 2. Fallback if RPC function is not yet deployed in DB
       const isolatedClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
         auth: {
           persistSession: false,
@@ -85,7 +109,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string }) {
       });
 
       const { data: authResult, error: authError } = await isolatedClient.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password,
       });
 
@@ -96,8 +120,8 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string }) {
         ) {
           toast.error(
             lang === "ar"
-              ? "تنبيه: تم تجاوز حد إرسال الإيميلات المجاني. يُرجى الدخول إلى لوحة Supabase ➔ Authentication ➔ Providers ➔ Email وتعطيل 'Confirm email' ليتم إنشاء الحسابات بكلمة مرور فورية دون إرسال إيميل."
-              : "Email rate limit exceeded. Please disable 'Confirm email' in Supabase Authentication settings to create accounts instantly."
+              ? "تنبيه: تم تجاوز حد إرسال الإيميلات. يُرجى تشغيل كود SQL الخاص بدالة create_team_member في لوحة سوبابيز للإنشاء الفوري المباشر، أو إلغاء تفعيل Confirm Email."
+              : "Email rate limit exceeded. Please run the SQL migration for create_team_member or disable 'Confirm email' in Supabase."
           );
           return;
         }

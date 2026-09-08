@@ -72,3 +72,81 @@ CREATE POLICY "roles manageable by admin" ON public.user_roles
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(), 'admin'::public.app_role))
   WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+-- 4. Enable pgcrypto extension for secure password hashing
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+-- 5. Direct team member creation function (bypasses email rate limits & auto-confirms)
+CREATE OR REPLACE FUNCTION public.create_team_member(
+  _email text,
+  _password text,
+  _role public.app_role DEFAULT 'member'
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  _new_id uuid;
+  _encrypted_pw text;
+BEGIN
+  -- Check admin authorization
+  IF NOT public.has_role(auth.uid(), 'admin'::public.app_role) THEN
+    RAISE EXCEPTION 'Only administrators can create team members';
+  END IF;
+
+  -- Check if user already exists
+  IF EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = lower(trim(_email))) THEN
+    RAISE EXCEPTION 'User with this email already exists';
+  END IF;
+
+  _new_id := gen_random_uuid();
+  _encrypted_pw := extensions.crypt(_password, extensions.gen_salt('bf'));
+
+  -- Insert directly into auth.users as fully confirmed
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    recovery_token
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    _new_id,
+    'authenticated',
+    'authenticated',
+    lower(trim(_email)),
+    _encrypted_pw,
+    now(),
+    '{"provider":"email","providers":["email"]}',
+    '{}',
+    now(),
+    now(),
+    '',
+    ''
+  );
+
+  -- Ensure profile exists
+  INSERT INTO public.profiles (id, email)
+  VALUES (_new_id, lower(trim(_email)))
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
+
+  -- Ensure user role is assigned
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES (_new_id, _role)
+  ON CONFLICT (user_id, role) DO UPDATE SET role = EXCLUDED.role;
+
+  RETURN _new_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_team_member(text, text, public.app_role) TO authenticated;

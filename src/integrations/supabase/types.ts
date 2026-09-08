@@ -18,6 +18,9 @@ export type Database = {
         Row: {
           callmebot_apikey: string | null
           id: boolean
+          notify_channel: string
+          telegram_bot_token: string | null
+          telegram_chat_id: string | null
           threshold_critical: number
           threshold_early: number
           threshold_medium: number
@@ -27,6 +30,9 @@ export type Database = {
         Insert: {
           callmebot_apikey?: string | null
           id?: boolean
+          notify_channel?: string
+          telegram_bot_token?: string | null
+          telegram_chat_id?: string | null
           threshold_critical?: number
           threshold_early?: number
           threshold_medium?: number
@@ -36,6 +42,9 @@ export type Database = {
         Update: {
           callmebot_apikey?: string | null
           id?: boolean
+          notify_channel?: string
+          telegram_bot_token?: string | null
+          telegram_chat_id?: string | null
           threshold_critical?: number
           threshold_early?: number
           threshold_medium?: number
@@ -118,6 +127,7 @@ export type Database = {
       }
       notification_log: {
         Row: {
+          channel: string
           created_at: string
           error: string | null
           id: string
@@ -129,6 +139,7 @@ export type Database = {
           success: boolean
         }
         Insert: {
+          channel?: string
           created_at?: string
           error?: string | null
           id?: string
@@ -140,6 +151,7 @@ export type Database = {
           success?: boolean
         }
         Update: {
+          channel?: string
           created_at?: string
           error?: string | null
           id?: string

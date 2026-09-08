@@ -10,6 +10,8 @@ import {
   uploadItemPhoto,
 } from "@/lib/photos";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
+import { ProductImageViewerDialog } from "@/components/ProductImageViewerDialog";
+import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,6 +106,7 @@ export function ItemFormDialog({
   const [existingPath, setExistingPath] = useState<string | null>(null);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -377,13 +380,16 @@ export function ItemFormDialog({
           <div className="space-y-1.5">
             <Label htmlFor="photo">{t("photoOptional")}</Label>
             <div className="flex items-center gap-3">
-              <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-                {previewUrl ? (
-                  <img src={previewUrl} alt={t("photo")} className="size-full object-cover" />
-                ) : (
-                  <ImageIcon className="size-6 text-muted-foreground" />
-                )}
-              </div>
+              <ProductImageThumbnail
+                url={previewUrl}
+                name={form.name || t("photo")}
+                itemCode={form.item_code}
+                batchNumber={form.batch_number}
+                size="lg"
+                onClick={() => {
+                  if (previewUrl) setViewerOpen(true);
+                }}
+              />
               <div className="flex flex-wrap gap-2">
                 <Input
                   ref={fileInput}
@@ -436,6 +442,24 @@ export function ItemFormDialog({
             setCodeError(null);
             setForm((f) => ({ ...f, item_code: code }));
           }}
+        />
+
+        <ProductImageViewerDialog
+          open={viewerOpen}
+          onOpenChange={setViewerOpen}
+          item={
+            previewUrl
+              ? {
+                  url: previewUrl,
+                  name: form.name || t("photo"),
+                  itemCode: form.item_code,
+                  batchNumber: form.batch_number,
+                  supplier: form.supplier,
+                  expiryDate: form.expiry_date,
+                  qcStatus: form.qc_status,
+                }
+              : null
+          }
         />
       </DialogContent>
     </Dialog>

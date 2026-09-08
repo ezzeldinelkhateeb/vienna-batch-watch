@@ -107,6 +107,9 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   id boolean PRIMARY KEY DEFAULT true,
   whatsapp_phone text,
   callmebot_apikey text,
+  telegram_bot_token text,
+  telegram_chat_id text,
+  notify_channel text NOT NULL DEFAULT 'both',
   threshold_early integer NOT NULL DEFAULT 90,
   threshold_medium integer NOT NULL DEFAULT 60,
   threshold_critical integer NOT NULL DEFAULT 30,
@@ -137,6 +140,7 @@ CREATE TABLE IF NOT EXISTS public.notification_log (
   item_id uuid REFERENCES public.items(id) ON DELETE SET NULL,
   item_name text NOT NULL,
   status text NOT NULL,
+  channel text NOT NULL DEFAULT 'whatsapp',
   message text,
   phone text,
   success boolean NOT NULL DEFAULT true,
@@ -198,3 +202,75 @@ CREATE POLICY "item photos update" ON storage.objects FOR UPDATE TO authenticate
 
 DROP POLICY IF EXISTS "item photos delete" ON storage.objects;
 CREATE POLICY "item photos delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'item-photos');
+
+-- 10. Direct Team Member Creation (Bypasses email rate limits & auto-confirms)
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+CREATE OR REPLACE FUNCTION public.create_team_member(
+  _email text,
+  _password text,
+  _role public.app_role DEFAULT 'member'
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  _new_id uuid;
+  _encrypted_pw text;
+BEGIN
+  IF NOT public.has_role(auth.uid(), 'admin'::public.app_role) THEN
+    RAISE EXCEPTION 'Only administrators can create team members';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = lower(trim(_email))) THEN
+    RAISE EXCEPTION 'User with this email already exists';
+  END IF;
+
+  _new_id := gen_random_uuid();
+  _encrypted_pw := extensions.crypt(_password, extensions.gen_salt('bf'));
+
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    recovery_token
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    _new_id,
+    'authenticated',
+    'authenticated',
+    lower(trim(_email)),
+    _encrypted_pw,
+    now(),
+    '{"provider":"email","providers":["email"]}',
+    '{}',
+    now(),
+    now(),
+    '',
+    ''
+  );
+
+  INSERT INTO public.profiles (id, email)
+  VALUES (_new_id, lower(trim(_email)))
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
+
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES (_new_id, _role)
+  ON CONFLICT (user_id, role) DO UPDATE SET role = EXCLUDED.role;
+
+  RETURN _new_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_team_member(text, text, public.app_role) TO authenticated;

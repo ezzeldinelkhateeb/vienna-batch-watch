@@ -31,7 +31,6 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,21 +45,9 @@ function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate({ to: "/inventory" });
-      } else {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        if (data.session) {
-          toast.success(lang === "ar" ? "تم إنشاء الحساب وتسجيل الدخول بنجاح!" : "Account created and signed in!");
-          navigate({ to: "/inventory" });
-        } else {
-          toast.info(t("checkEmail"), { duration: 6000 });
-          setMode("signin");
-        }
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      navigate({ to: "/inventory" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("errGeneric"));
     } finally {
@@ -73,41 +60,8 @@ function AuthPage() {
       <AppHeader showNav={false} />
       <main className="mx-auto w-full max-w-md px-4 py-10 sm:py-16">
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
-          <div className="flex rounded-lg bg-muted p-1 text-sm mb-6">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className={`flex-1 rounded-md py-1.5 font-medium transition-colors ${
-                mode === "signin"
-                  ? "bg-card text-cocoa shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t("signIn")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`flex-1 rounded-md py-1.5 font-medium transition-colors ${
-                mode === "signup"
-                  ? "bg-card text-cocoa shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t("signUp")}
-            </button>
-          </div>
-
-          <h1 className="text-xl font-semibold text-cocoa">
-            {mode === "signin" ? t("loginTitle") : t("signUp")}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {mode === "signin"
-              ? t("loginSubtitle")
-              : lang === "ar"
-              ? "أنشئ حسابك. الحساب الأول المسجل في النظام يحصل تلقائيًا على صلاحيات مدير النظام (Admin)."
-              : "Register your account. The first registered user automatically gains full Admin privileges."}
-          </p>
+          <h1 className="text-xl font-semibold text-cocoa">{t("loginTitle")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("loginSubtitle")}</p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
@@ -129,34 +83,21 @@ function AuthPage() {
                 type="password"
                 required
                 minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? t("loading") : mode === "signin" ? t("signIn") : t("signUp")}
+              {busy ? t("loading") : t("signIn")}
             </Button>
           </form>
 
-          {mode === "signup" ? (
-            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-              {lang === "ar"
-                ? "💡 ملاحظة: أول حساب يتم تسجيله في قاعدة البيانات يُصبح تلقائياً مسؤول النظام (Admin) ويستطيع التحكم الكامل في الصلاحيات والمخزون."
-                : "💡 Note: The very first account registered in the database is automatically granted Admin privileges."}
-            </div>
-          ) : (
-            <div className="mt-6 text-center text-xs text-muted-foreground">
-              {t("noAccount")}{" "}
-              <button
-                type="button"
-                onClick={() => setMode("signup")}
-                className="font-medium text-cocoa underline underline-offset-4"
-              >
-                {t("signUp")}
-              </button>
-            </div>
-          )}
+          <div className="mt-6 rounded-lg border border-border/60 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+            {lang === "ar"
+              ? "🔒 تسجيل الموظفين والحسابات الجديدة يتم حصرياً عبر مدير النظام (Admin) من داخل التطبيق."
+              : "🔒 Employee and new account registration is managed exclusively by the System Administrator (Admin)."}
+          </div>
         </div>
       </main>
     </div>
