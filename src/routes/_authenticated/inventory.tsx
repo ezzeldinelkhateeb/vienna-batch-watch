@@ -5,6 +5,7 @@ import { Download, ImageIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { signedPhotoUrls } from "@/lib/photos";
 import { countdownText } from "@/lib/format";
@@ -17,7 +18,7 @@ import {
 } from "@/lib/status";
 import { AppHeader } from "@/components/AppHeader";
 import { StatusLegend } from "@/components/StatusLegend";
-import { StatusPill, STATUS_LABEL_KEY } from "@/components/StatusPill";
+import { StatusPill, STATUS_LABEL_KEY, QcBadge, type QcStatusType } from "@/components/StatusPill";
 import { ItemFormDialog, type ItemRow } from "@/components/ItemFormDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,12 +51,14 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function InventoryPage() {
   const { t } = useI18n();
+  const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const settings = useSettings();
   const thresholds = settings.data?.thresholds;
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
+  const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -100,12 +103,14 @@ function InventoryPage() {
     return list.filter(
       (r) =>
         (statusFilter === "all" || r.status === statusFilter) &&
+        (qcFilter === "all" || (r.item.qc_status ?? "quarantine") === qcFilter) &&
         (q === "" ||
           (r.item.item_code ?? "").toLowerCase().includes(q) ||
           r.item.name.toLowerCase().includes(q) ||
-          (r.item.supplier ?? "").toLowerCase().includes(q)),
+          (r.item.supplier ?? "").toLowerCase().includes(q) ||
+          (r.item.storage_location ?? "").toLowerCase().includes(q)),
     );
-  }, [items.data, search, statusFilter, thresholds]);
+  }, [items.data, search, statusFilter, qcFilter, thresholds]);
 
   const counts = useMemo(() => {
     const base: Record<Status, number> = {
@@ -126,6 +131,8 @@ function InventoryPage() {
       t("itemCode"),
       t("name"),
       t("supplier"),
+      t("qcStatus"),
+      t("storageLocation"),
       t("productionDate"),
       t("expiryDate"),
       t("quantity"),
@@ -133,12 +140,15 @@ function InventoryPage() {
       t("status"),
       t("remaining"),
       t("notes"),
+      t("qcNotes"),
     ];
     const lines = rows.map((r) =>
       [
         r.item.item_code ?? "",
         r.item.name,
         r.item.supplier ?? "",
+        t((r.item.qc_status ?? "quarantine") as never),
+        r.item.storage_location ?? "",
         r.item.production_date ?? "",
         r.item.expiry_date,
         r.item.quantity ?? "",
@@ -146,6 +156,7 @@ function InventoryPage() {
         t(STATUS_LABEL_KEY[r.status]),
         countdownText(r.days, t),
         (r.item.notes ?? "").replace(/\n/g, " "),
+        (r.item.qc_notes ?? "").replace(/\n/g, " "),
       ]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(","),
@@ -189,7 +200,7 @@ function InventoryPage() {
             value={statusFilter}
             onValueChange={(v) => setStatusFilter(v as "all" | Status)}
           >
-            <SelectTrigger className="sm:w-52">
+            <SelectTrigger className="sm:w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -199,6 +210,21 @@ function InventoryPage() {
                   {t(STATUS_LABEL_KEY[s])}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={qcFilter}
+            onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}
+          >
+            <SelectTrigger className="sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("allQcStatuses")}</SelectItem>
+              <SelectItem value="quarantine">🔒 {t("quarantine")}</SelectItem>
+              <SelectItem value="approved">✅ {t("approved")}</SelectItem>
+              <SelectItem value="rejected">❌ {t("rejected")}</SelectItem>
+              <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex gap-2 sm:ms-auto">
@@ -228,15 +254,17 @@ function InventoryPage() {
               {(items.data ?? []).length === 0 ? t("noItems") : t("noResults")}
             </p>
           ) : (
-            <table className="w-full min-w-[1000px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-muted/60 text-start">
                 <tr>
                   {[
                     "status",
+                    "qcStatus",
                     "itemCode",
                     "photo",
                     "name",
                     "supplier",
+                    "storageLocation",
                     "quantity",
                     "productionDate",
                     "expiryDate",
@@ -264,6 +292,9 @@ function InventoryPage() {
                     <td className="px-3 py-2">
                       <StatusPill status={status} />
                     </td>
+                    <td className="px-3 py-2">
+                      <QcBadge status={item.qc_status} />
+                    </td>
                     <td className="px-3 py-2 font-mono text-xs">
                       {item.item_code || t("notSet")}
                     </td>
@@ -290,6 +321,9 @@ function InventoryPage() {
                     </td>
                     <td className="px-3 py-2 font-medium">{item.name}</td>
                     <td className="px-3 py-2">{item.supplier || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {item.storage_location || "—"}
+                    </td>
 
                     <td className="px-3 py-2">
                       {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "—"}
@@ -313,17 +347,20 @@ function InventoryPage() {
                         >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label={t("delete")}
-                          disabled={remove.isPending}
-                          onClick={() => {
-                            if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
-                          }}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("delete")}
+                            disabled={remove.isPending}
+                            title={t("delete")}
+                            onClick={() => {
+                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                            }}
+                          >
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

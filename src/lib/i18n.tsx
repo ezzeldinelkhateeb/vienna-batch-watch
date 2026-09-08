@@ -114,6 +114,19 @@ const en: Dict = {
   errMissingWhatsapp: "Add your WhatsApp number and API key first.",
   totalItems: "Total items",
   search: "Search by code, name or supplier",
+
+  // Quality Control (QC)
+  qcStatus: "QC Status",
+  quarantine: "Quarantine",
+  approved: "Approved",
+  rejected: "Rejected",
+  conditional: "Conditional",
+  storageLocation: "Storage Location",
+  qcNotes: "QC Inspection Notes",
+  errProductionAfterExpiry: "Production date cannot be after expiry date.",
+  adminDeleteOnly: "Only administrators can delete raw material batches.",
+  loginAdminContact: "Need access? Please contact your system administrator at Vienna.",
+  allQcStatuses: "All QC statuses",
 };
 
 const ar: Dict = {
@@ -219,6 +232,19 @@ const ar: Dict = {
   errGeneric: "حدث خطأ ما. حاول مرة أخرى.",
   errMissingWhatsapp: "أضف رقم واتساب ومفتاح API أولًا.",
   totalItems: "إجمالي الأصناف",
+
+  // Quality Control (QC)
+  qcStatus: "حالة الجودة",
+  quarantine: "تحت الحجر",
+  approved: "مقبول",
+  rejected: "مرفوض",
+  conditional: "مشروط",
+  storageLocation: "موقع التخزين",
+  qcNotes: "ملاحظات فحص الجودة",
+  errProductionAfterExpiry: "لا يمكن أن يكون تاريخ الإنتاج لاحقاً لتاريخ انتهاء الصلاحية.",
+  adminDeleteOnly: "المسؤولون فقط يمكنهم حذف دفعات المواد الخام.",
+  loginAdminContact: "تحتاج إلى صلاحية وصول؟ يرجى التواصل مع مسؤول النظام في شركة فينا.",
+  allQcStatuses: "كل حالات الجودة",
 };
 
 const dicts: Record<Lang, Dict> = { ar, en };

@@ -31,7 +31,6 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,23 +45,9 @@ function AuthPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate({ to: "/inventory" });
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/auth` },
-        });
-        if (error) throw error;
-        if (data.session) navigate({ to: "/inventory" });
-        else {
-          toast.success(t("checkEmail"));
-          setMode("signin");
-        }
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      navigate({ to: "/inventory" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("errGeneric"));
     } finally {
@@ -97,23 +82,19 @@ function AuthPage() {
                 type="password"
                 required
                 minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? t("loading") : mode === "signin" ? t("signIn") : t("signUp")}
+              {busy ? t("loading") : t("signIn")}
             </Button>
           </form>
 
-          <button
-            type="button"
-            className="mt-4 w-full text-sm text-primary underline-offset-4 hover:underline"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            {mode === "signin" ? t("noAccount") : t("haveAccount")}
-          </button>
+          <div className="mt-6 rounded-lg border border-border/60 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+            {t("loginAdminContact")}
+          </div>
         </div>
       </main>
     </div>

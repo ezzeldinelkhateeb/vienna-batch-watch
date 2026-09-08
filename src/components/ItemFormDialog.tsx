@@ -20,6 +20,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export type QcStatus = "quarantine" | "approved" | "rejected" | "conditional";
 
 export interface ItemRow {
   id: string;
@@ -33,6 +42,9 @@ export interface ItemRow {
   notes: string | null;
   photo_path: string | null;
   last_notified_status: string | null;
+  qc_status?: QcStatus | null;
+  storage_location?: string | null;
+  qc_notes?: string | null;
 }
 
 interface FormState {
@@ -44,6 +56,9 @@ interface FormState {
   quantity: string;
   unit: string;
   notes: string;
+  qc_status: QcStatus;
+  storage_location: string;
+  qc_notes: string;
 }
 
 const empty: FormState = {
@@ -55,6 +70,9 @@ const empty: FormState = {
   quantity: "",
   unit: "",
   notes: "",
+  qc_status: "quarantine",
+  storage_location: "",
+  qc_notes: "",
 };
 
 export function ItemFormDialog({
@@ -94,6 +112,9 @@ export function ItemFormDialog({
             quantity: item.quantity != null ? String(item.quantity) : "",
             unit: item.unit ?? "",
             notes: item.notes ?? "",
+            qc_status: item.qc_status ?? "quarantine",
+            storage_location: item.storage_location ?? "",
+            qc_notes: item.qc_notes ?? "",
           }
         : empty,
     );
@@ -140,6 +161,10 @@ export function ItemFormDialog({
       toast.error(t("errRequiredExpiry"));
       return;
     }
+    if (form.production_date && form.expiry_date && form.production_date > form.expiry_date) {
+      toast.error(t("errProductionAfterExpiry"));
+      return;
+    }
     const quantity = form.quantity === "" ? null : Number(form.quantity);
     if (quantity != null && (Number.isNaN(quantity) || quantity < 0)) {
       toast.error(t("errQuantity"));
@@ -164,6 +189,9 @@ export function ItemFormDialog({
         unit: form.unit.trim() || null,
         notes: form.notes.trim() || null,
         photo_path,
+        qc_status: form.qc_status,
+        storage_location: form.storage_location.trim() || null,
+        qc_notes: form.qc_notes.trim() || null,
       };
 
       if (item) {
@@ -271,6 +299,35 @@ export function ItemFormDialog({
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="qc_status">{t("qcStatus")}</Label>
+              <Select
+                value={form.qc_status}
+                onValueChange={(val) => setForm((f) => ({ ...f, qc_status: val as QcStatus }))}
+              >
+                <SelectTrigger id="qc_status">
+                  <SelectValue placeholder={t("qcStatus")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="quarantine">🔒 {t("quarantine")}</SelectItem>
+                  <SelectItem value="approved">✅ {t("approved")}</SelectItem>
+                  <SelectItem value="rejected">❌ {t("rejected")}</SelectItem>
+                  <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="storage_location">{t("storageLocation")}</Label>
+              <Input
+                id="storage_location"
+                placeholder="e.g. Cold Storage A, Dry Store 2"
+                value={form.storage_location}
+                onChange={set("storage_location")}
+              />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="photo">{t("photoOptional")}</Label>
             <div className="flex items-center gap-3">
@@ -302,7 +359,18 @@ export function ItemFormDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">{t("notes")}</Label>
-            <Textarea id="notes" rows={3} value={form.notes} onChange={set("notes")} />
+            <Textarea id="notes" rows={2} value={form.notes} onChange={set("notes")} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="qc_notes">{t("qcNotes")}</Label>
+            <Textarea
+              id="qc_notes"
+              rows={2}
+              placeholder="e.g. Sensory inspection passed, moisture 3.2%"
+              value={form.qc_notes}
+              onChange={set("qc_notes")}
+            />
           </div>
 
           <DialogFooter className="gap-2">
