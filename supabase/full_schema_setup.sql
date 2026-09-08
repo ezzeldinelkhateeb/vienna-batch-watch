@@ -157,15 +157,27 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 DROP TRIGGER IF EXISTS items_updated_at ON public.items;
 CREATE TRIGGER items_updated_at BEFORE UPDATE ON public.items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- Automatically assign the very first registered user as 'admin'
+-- Automatically assign midooda1995@gmail.com or the first user as 'admin'
 CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE user_count integer;
+DECLARE admin_count integer; assigned_role public.app_role;
 BEGIN
-  INSERT INTO public.profiles (id, email) VALUES (NEW.id, NEW.email) ON CONFLICT (id) DO NOTHING;
-  SELECT count(*) INTO user_count FROM public.user_roles;
+  INSERT INTO public.profiles (id, email) VALUES (NEW.id, NEW.email) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
+  
+  IF lower(NEW.email) = 'midooda1995@gmail.com' THEN
+    assigned_role := 'admin'::public.app_role;
+  ELSE
+    SELECT count(*) INTO admin_count FROM public.user_roles WHERE role = 'admin';
+    IF admin_count = 0 THEN
+      assigned_role := 'admin'::public.app_role;
+    ELSE
+      assigned_role := 'member'::public.app_role;
+    END IF;
+  END IF;
+
   INSERT INTO public.user_roles (user_id, role)
-  VALUES (NEW.id, CASE WHEN user_count = 0 THEN 'admin'::public.app_role ELSE 'member'::public.app_role END)
-  ON CONFLICT DO NOTHING;
+  VALUES (NEW.id, assigned_role)
+  ON CONFLICT (user_id, role) DO UPDATE SET role = EXCLUDED.role;
+
   RETURN NEW;
 END; $$;
 

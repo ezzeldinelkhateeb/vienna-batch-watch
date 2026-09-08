@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { TeamManagement } from "@/components/TeamManagement";
+
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
@@ -23,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
       },
       { property: "og:title", content: "Settings — Vienna Expiry Tracker" },
       {
-        property: "og:description",
+        name: "property",
         content: "WhatsApp alert credentials and warning thresholds.",
       },
     ],
@@ -33,7 +35,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 function SettingsPage() {
   const { t } = useI18n();
-  const { isAdmin } = useAuth();
+  const { session, isAdmin } = useAuth();
   const settings = useSettings();
   const queryClient = useQueryClient();
   const sendTest = useServerFn(sendTestWhatsApp);
@@ -102,6 +104,8 @@ function SettingsPage() {
     <div className="min-h-screen bg-background">
       <AppHeader />
       <main className="mx-auto w-full max-w-2xl space-y-5 px-4 py-6 sm:px-6">
+        {isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
+
         <form onSubmit={save} className="space-y-5 rounded-xl border bg-card p-5 shadow-sm">
           <div>
             <h1 className="text-lg font-semibold text-cocoa">{t("whatsappSettings")}</h1>
