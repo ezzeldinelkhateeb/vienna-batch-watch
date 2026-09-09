@@ -18,6 +18,8 @@ import {
   AlertOctagon,
   XCircle,
   MessageCircle,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -25,13 +27,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
-import { signedPhotoUrls } from "@/lib/photos";
+import { signedPhotoUrls, extractAllPhotoPaths, parsePhotos } from "@/lib/photos";
 import { countdownText } from "@/lib/format";
 import { STATUS_ORDER, STATUS_TINT, daysUntil, statusFor, type Status } from "@/lib/status";
 import { AppHeader } from "@/components/AppHeader";
 import { StatusLegend } from "@/components/StatusLegend";
-import { StatusPill, STATUS_LABEL_KEY, QcBadge, type QcStatusType } from "@/components/StatusPill";
+import { StatusPill, STATUS_LABEL_KEY, QcBadge, FefoBadge, type QcStatusType } from "@/components/StatusPill";
 import { ItemFormDialog, type ItemRow } from "@/components/ItemFormDialog";
+import { QuickQcModal } from "@/components/QuickQcModal";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
 import {
@@ -53,7 +56,7 @@ import {
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({
     meta: [
-      { title: "Inventory — Vienna Expiry Tracker" },
+      { title: "Inventory — Vienna Raw Material Expiry Tracker" },
       {
         name: "description",
         content:
@@ -79,6 +82,7 @@ function InventoryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
+  const [fefoOnly, setFefoOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("vienna_view_mode");
@@ -91,6 +95,7 @@ function InventoryPage() {
   const [printOpen, setPrintOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
+  const [quickQcItem, setQuickQcItem] = useState<ItemRow | null>(null);
   const [activeImage, setActiveImage] = useState<ProductImageDetails | null>(null);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
@@ -128,19 +133,60 @@ function InventoryPage() {
     queryKey: ["item-photo-urls", (items.data ?? []).map((i) => i.photo_path).join(",")],
     enabled: (items.data ?? []).some((i) => i.photo_path),
     queryFn: () =>
-      signedPhotoUrls((items.data ?? []).map((i) => i.photo_path).filter(Boolean) as string[]),
+      signedPhotoUrls(extractAllPhotoPaths((items.data ?? []).map((i) => i.photo_path))),
   });
+
+  // Calculate FEFO #1 priority for approved batches (earliest expiry for each material name)
+  const fefoPriorityMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    const groups = new Map<string, ItemRow[]>();
+
+    for (const item of items.data ?? []) {
+      if (item.qc_status === "approved" && daysUntil(item.expiry_date) >= 0) {
+        const key = item.name.trim().toLowerCase();
+        const list = groups.get(key) ?? [];
+        list.push(item);
+        groups.set(key, list);
+      }
+    }
+
+    for (const [, list] of groups) {
+      list.sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
+      if (list[0]) {
+        map.set(list[0].id, true);
+      }
+    }
+    return map;
+  }, [items.data]);
+
+  const qcCounts = useMemo(() => {
+    let quarantine = 0;
+    let approved = 0;
+    let rejected = 0;
+    let fefo = 0;
+    for (const item of items.data ?? []) {
+      const st = item.qc_status ?? "quarantine";
+      if (st === "quarantine") quarantine++;
+      else if (st === "approved") approved++;
+      else if (st === "rejected") rejected++;
+
+      if (fefoPriorityMap.get(item.id)) fefo++;
+    }
+    return { quarantine, approved, rejected, fefo };
+  }, [items.data, fefoPriorityMap]);
 
   const rows = useMemo(() => {
     const list = (items.data ?? []).map((item) => {
       const days = daysUntil(item.expiry_date);
-      return { item, days, status: statusFor(days, thresholds) };
+      const isFefoFirst = !!fefoPriorityMap.get(item.id);
+      return { item, days, status: statusFor(days, thresholds), isFefoFirst };
     });
     const q = search.trim().toLowerCase();
     return list.filter(
       (r) =>
         (statusFilter === "all" || r.status === statusFilter) &&
         (qcFilter === "all" || (r.item.qc_status ?? "quarantine") === qcFilter) &&
+        (!fefoOnly || r.isFefoFirst) &&
         (q === "" ||
           (r.item.item_code ?? "").toLowerCase().includes(q) ||
           (r.item.batch_number ?? "").toLowerCase().includes(q) ||
@@ -148,7 +194,7 @@ function InventoryPage() {
           (r.item.supplier ?? "").toLowerCase().includes(q) ||
           (r.item.storage_location ?? "").toLowerCase().includes(q)),
     );
-  }, [items.data, search, statusFilter, qcFilter, thresholds]);
+  }, [items.data, search, statusFilter, qcFilter, fefoOnly, fefoPriorityMap, thresholds]);
 
   const counts = useMemo(() => {
     const base: Record<Status, number> = {
@@ -316,6 +362,94 @@ function InventoryPage() {
           ))}
         </div>
 
+        {/* Vienna Confectionery Factory QC & FEFO Quick Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground shrink-0 ps-1 flex items-center gap-1">
+            <ShieldCheck className="size-3.5 text-brand" />
+            <span>{lang === "ar" ? "مسار الجودة والتشغيل:" : "QC & Dispatch:"}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setQcFilter("all");
+              setFefoOnly(false);
+            }}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all ${
+              qcFilter === "all" && !fefoOnly
+                ? "bg-cocoa text-cream shadow-xs"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {t("tabAll")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQcFilter("quarantine");
+              setFefoOnly(false);
+            }}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
+              qcFilter === "quarantine" && !fefoOnly
+                ? "bg-amber-600 text-white shadow-xs"
+                : "bg-amber-100/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300"
+            }`}
+          >
+            <span>🔒</span>
+            <span>{t("filterAwaitingQc")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({qcCounts.quarantine})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFefoOnly(!fefoOnly);
+              if (!fefoOnly) setQcFilter("approved");
+            }}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold transition-all flex items-center gap-1 ${
+              fefoOnly
+                ? "bg-amber-500 text-amber-950 ring-2 ring-amber-400 shadow-sm"
+                : "bg-amber-100/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300"
+            }`}
+          >
+            <span>⭐</span>
+            <span>{t("filterFefoGuide")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({qcCounts.fefo})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQcFilter("approved");
+              setFefoOnly(false);
+            }}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
+              qcFilter === "approved" && !fefoOnly
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-emerald-100/70 text-emerald-900 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300"
+            }`}
+          >
+            <span>✅</span>
+            <span>{t("filterReleased")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({qcCounts.approved})</span>
+          </button>
+          {qcCounts.rejected > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setQcFilter("rejected");
+                setFefoOnly(false);
+              }}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
+                qcFilter === "rejected" && !fefoOnly
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-rose-100/70 text-rose-900 hover:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300"
+              }`}
+            >
+              <span>❌</span>
+              <span>{t("filterRejected")}</span>
+              <span className="opacity-80 font-mono text-[10px]">({qcCounts.rejected})</span>
+            </button>
+          )}
+        </div>
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex gap-2 w-full sm:max-w-xs">
             <Input
@@ -422,8 +556,14 @@ function InventoryPage() {
         ) : viewMode === "cards" ? (
           /* Cards View (Mobile & Tablet Friendly) */
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {rows.map(({ item, days, status }) => {
-              const url = item.photo_path ? photoUrls.data?.[item.photo_path] : undefined;
+            {rows.map(({ item, days, status, isFefoFirst }) => {
+              const parsedPhotos = parsePhotos(item.photo_path);
+              const primaryPath = parsedPhotos[0]?.path;
+              const url = primaryPath ? photoUrls.data?.[primaryPath] : undefined;
+              const photoList = parsedPhotos
+                .map((p) => ({ url: photoUrls.data?.[p.path] || "", caption: p.caption }))
+                .filter((p) => Boolean(p.url));
+
               return (
                 <div
                   key={item.id}
@@ -453,10 +593,12 @@ function InventoryPage() {
                         name={item.name}
                         itemCode={item.item_code}
                         batchNumber={item.batch_number}
+                        photoCount={parsedPhotos.length}
                         size="md"
                         onClick={() => {
-                          if (url) {
+                          if (url || photoList.length > 0) {
                             setActiveImage({
+                              photos: photoList,
                               url,
                               name: item.name,
                               itemCode: item.item_code,
@@ -474,6 +616,7 @@ function InventoryPage() {
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
                       <StatusPill status={status} />
                       <QcBadge status={item.qc_status} />
+                      {isFefoFirst && <FefoBadge />}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
@@ -506,17 +649,29 @@ function InventoryPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-1 border-t pt-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                      title={t("shareViaWhatsApp")}
-                      onClick={() => shareItemOnWhatsApp(item, status, days)}
-                    >
-                      <MessageCircle className="size-3.5" />
-                      <span>{t("shareViaWhatsApp")}</span>
-                    </Button>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-1.5 border-t pt-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-semibold shadow-xs"
+                        onClick={() => setQuickQcItem(item)}
+                      >
+                        <ShieldCheck className="size-3.5 text-brand" />
+                        <span>{t("inspectQc")}</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                        title={t("shareViaWhatsApp")}
+                        onClick={() => shareItemOnWhatsApp(item, status, days)}
+                      >
+                        <MessageCircle className="size-3.5" />
+                        <span className="hidden sm:inline">{t("shareViaWhatsApp")}</span>
+                      </Button>
+                    </div>
 
                     <div className="flex items-center gap-1">
                       <Button
@@ -529,7 +684,7 @@ function InventoryPage() {
                         }}
                       >
                         <Pencil className="size-3.5" />
-                        {t("edit")}
+                        <span>{t("edit")}</span>
                       </Button>
                       {isAdmin && (
                         <Button
@@ -542,7 +697,7 @@ function InventoryPage() {
                           }}
                         >
                           <Trash2 className="size-3.5" />
-                          {t("delete")}
+                          <span>{t("delete")}</span>
                         </Button>
                       )}
                     </div>
@@ -580,8 +735,14 @@ function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ item, days, status }) => {
-                  const url = item.photo_path ? photoUrls.data?.[item.photo_path] : undefined;
+                {rows.map(({ item, days, status, isFefoFirst }) => {
+                  const parsedPhotos = parsePhotos(item.photo_path);
+                  const primaryPath = parsedPhotos[0]?.path;
+                  const url = primaryPath ? photoUrls.data?.[primaryPath] : undefined;
+                  const photoList = parsedPhotos
+                    .map((p) => ({ url: photoUrls.data?.[p.path] || "", caption: p.caption }))
+                    .filter((p) => Boolean(p.url));
+
                   return (
                     <tr
                       key={item.id}
@@ -591,8 +752,11 @@ function InventoryPage() {
                       <td className="px-3 py-2">
                         <StatusPill status={status} />
                       </td>
-                      <td className="px-3 py-2">
-                        <QcBadge status={item.qc_status} />
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <QcBadge status={item.qc_status} />
+                          {isFefoFirst && <FefoBadge />}
+                        </div>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">
                         {item.item_code || t("notSet")}
@@ -612,10 +776,12 @@ function InventoryPage() {
                           name={item.name}
                           itemCode={item.item_code}
                           batchNumber={item.batch_number}
+                          photoCount={parsedPhotos.length}
                           size="sm"
                           onClick={() => {
-                            if (url) {
+                            if (url || photoList.length > 0) {
                               setActiveImage({
+                                photos: photoList,
                                 url,
                                 name: item.name,
                                 itemCode: item.item_code,
@@ -646,6 +812,16 @@ function InventoryPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("inspectQc")}
+                            title={t("inspectQc")}
+                            className="text-brand hover:text-brand hover:bg-brand/10"
+                            onClick={() => setQuickQcItem(item)}
+                          >
+                            <ShieldCheck className="size-4" />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -709,6 +885,13 @@ function InventoryPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         item={editing}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ["items"] })}
+      />
+
+      <QuickQcModal
+        open={!!quickQcItem}
+        onOpenChange={(open) => !open && setQuickQcItem(null)}
+        item={quickQcItem}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ["items"] })}
       />
 

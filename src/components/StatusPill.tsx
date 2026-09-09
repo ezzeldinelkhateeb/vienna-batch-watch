@@ -63,3 +63,17 @@ export function QcBadge({ status }: { status?: QcStatusType | null | undefined }
     </span>
   );
 }
+
+export function FefoBadge() {
+  const { t } = useI18n();
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-amber-400/80 bg-gradient-to-r from-amber-500/20 via-yellow-400/20 to-amber-500/20 px-2.5 py-0.5 text-[11px] font-bold text-amber-950 dark:text-amber-200 shadow-xs ring-1 ring-amber-400/40"
+      title={t("fefoExplanation")}
+    >
+      <span>⭐</span>
+      <span>{t("fefoPriorityOne")}</span>
+    </span>
+  );
+}
+

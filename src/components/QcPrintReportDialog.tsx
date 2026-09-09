@@ -1,8 +1,8 @@
-import { Printer, X } from "lucide-react";
+import { useMemo } from "react";
+import { Printer } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { type ItemRow } from "@/components/ItemFormDialog";
 import { type Status, daysUntil, statusFor, type Thresholds } from "@/lib/status";
-import { STATUS_LABEL_KEY } from "@/components/StatusPill";
 import { countdownText } from "@/lib/format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   const handlePrint = () => {
     window.print();
@@ -37,6 +37,29 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
     return st === "critical" || st === "expired";
   }).length;
 
+  // Calculate FEFO #1 dispatch priority for approved batches
+  const fefoPriorityMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    const groups = new Map<string, ItemRow[]>();
+
+    for (const item of items) {
+      if (item.qc_status === "approved" && daysUntil(item.expiry_date) >= 0) {
+        const key = item.name.trim().toLowerCase();
+        const list = groups.get(key) ?? [];
+        list.push(item);
+        groups.set(key, list);
+      }
+    }
+
+    for (const [, list] of groups) {
+      list.sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
+      if (list[0]) {
+        map.set(list[0].id, true);
+      }
+    }
+    return map;
+  }, [items]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-4 sm:p-8">
@@ -57,11 +80,18 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b-2 border-cocoa pb-4">
             <div>
-              <h1 className="font-serif text-3xl font-bold tracking-tight text-cocoa">Vienna</h1>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                High Quality Chocolate — QA & QC Department
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏭</span>
+                <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-cocoa">
+                  {lang === "ar" ? "مصنع فينا للبسكوت والشيكولاتة" : "Vienna Biscuit & Chocolate Factory"}
+                </h1>
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-0.5">
+                {lang === "ar"
+                  ? "إدارة توكيد ومراقبة الجودة — فحص واعتماد خامات التشغيل وقاعدة الصرف بالصلاحية (FEFO)"
+                  : "QA & QC Department — Raw Material Release & Confectionery FEFO Protocol"}
               </p>
-              <h2 className="mt-2 text-base font-semibold text-cocoa">{t("qcReportTitle")}</h2>
+              <h2 className="mt-2 text-sm sm:text-base font-bold text-cocoa">{t("qcReportTitle")}</h2>
             </div>
             <div className="mt-3 sm:mt-0 text-xs text-muted-foreground text-start sm:text-end">
               <p>
@@ -109,6 +139,8 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                   <th className="p-2 text-start">{t("name")}</th>
                   <th className="p-2 text-start">{t("supplier")}</th>
                   <th className="p-2 text-start">{t("qcStatus")}</th>
+                  <th className="p-2 text-start">FEFO</th>
+                  <th className="p-2 text-start">{t("coaNumber")}</th>
                   <th className="p-2 text-start">{t("storageLocation")}</th>
                   <th className="p-2 text-start">{t("expiryDate")}</th>
                   <th className="p-2 text-start">{t("quantity")}</th>
@@ -118,7 +150,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
               <tbody className="divide-y">
                 {items.map((it, idx) => {
                   const days = daysUntil(it.expiry_date);
-                  const st = statusFor(days, thresholds);
+                  const isFefoFirst = fefoPriorityMap.get(it.id);
                   return (
                     <tr key={it.id} className="odd:bg-background even:bg-muted/20">
                       <td className="p-2 font-mono">{idx + 1}</td>
@@ -131,6 +163,16 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                       <td className="p-2 font-semibold">
                         {t((it.qc_status ?? "quarantine") as never)}
                       </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {isFefoFirst ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 border border-amber-300">
+                            ⭐ FEFO #1
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-2 font-mono text-xs">{it.coa_number || "—"}</td>
                       <td className="p-2">{it.storage_location || "—"}</td>
                       <td className="p-2 font-mono whitespace-nowrap">
                         {it.expiry_date}
@@ -174,9 +216,13 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
             </div>
 
             <div className="mt-6 text-center text-[11px] text-muted-foreground">
-              <p>Vienna High Quality Chocolate — Internal Quality Management System</p>
+              <p className="font-semibold text-cocoa">
+                {lang === "ar"
+                  ? "مصنع فينا للبسكوت والشيكولاتة — نظام إدارة الجودة وسلامة الغذاء المعتمد"
+                  : "Vienna Biscuit & Chocolate Factory — Certified Food Safety & Quality Management System"}
+              </p>
               <p className="font-serif italic text-cocoa/70">
-                Certified for Food Safety & Quality Standards
+                Adhering to Good Manufacturing Practice (GMP) & FEFO Dispatch Policy
               </p>
             </div>
           </div>

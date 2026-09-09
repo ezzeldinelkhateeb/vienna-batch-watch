@@ -56,3 +56,72 @@ export async function signedPhotoUrls(paths: string[]): Promise<Record<string, s
   }
   return map;
 }
+
+export interface ItemPhoto {
+  id: string;
+  path: string;
+  caption?: string | undefined;
+}
+
+/** Parse raw photo_path field which can be either legacy string path or JSON array */
+export function parsePhotos(raw: string | null | undefined): ItemPhoto[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item, index): ItemPhoto | null => {
+            if (!item) return null;
+            if (typeof item === "string") {
+              return { id: `photo-${index}-${item}`, path: item, caption: "" };
+            }
+            if (typeof item === "object" && "path" in item && typeof (item as { path: unknown }).path === "string") {
+              const obj = item as { path: string; caption?: string };
+              return {
+                id: `photo-${index}-${obj.path}`,
+                path: obj.path,
+                caption: obj.caption || "",
+              };
+            }
+            return null;
+          })
+          .filter((p): p is ItemPhoto => p !== null && !!p.path);
+      }
+    } catch {
+      // Fall through to single string
+    }
+  }
+
+  // Legacy single file path
+  return [{ id: `photo-0-${trimmed}`, path: trimmed, caption: "" }];
+}
+
+/** Serialize array of photos into JSON string or null */
+export function serializePhotos(photos: Array<{ path: string; caption?: string | undefined }>): string | null {
+  const valid = photos
+    .filter((p) => Boolean(p.path && p.path.trim()))
+    .map((p) => ({
+      path: p.path.trim(),
+      caption: (p.caption || "").trim(),
+    }));
+
+  if (valid.length === 0) return null;
+  return JSON.stringify(valid);
+}
+
+/** Extract all unique storage paths from a list of raw photo_path fields */
+export function extractAllPhotoPaths(rawList: Array<string | null | undefined>): string[] {
+  const set = new Set<string>();
+  for (const raw of rawList) {
+    const list = parsePhotos(raw);
+    for (const p of list) {
+      if (p.path) set.add(p.path);
+    }
+  }
+  return Array.from(set);
+}
+
