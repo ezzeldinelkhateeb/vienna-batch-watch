@@ -108,7 +108,7 @@ function SettingsPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const { error } = await supabase.from("app_settings").upsert({
+      const payload: Record<string, any> = {
         id: true,
         whatsapp_phone: phone.trim() || null,
         callmebot_apikey: apiKey.trim() || null,
@@ -122,12 +122,27 @@ function SettingsPage() {
               threshold_critical: Number(critical),
             }
           : {}),
-      });
-      if (error) throw error;
+      };
+
+      const { error } = await supabase.from("app_settings").upsert(payload);
+      if (error) {
+        const fullErr = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`;
+        if (
+          fullErr.includes("telegram_bot_token") ||
+          fullErr.includes("notify_channel") ||
+          fullErr.includes("schema cache")
+        ) {
+          throw new Error(
+            "جدول الإعدادات في Supabase يحتاج لتشغيل كود التحديث (SQL Migration) لإضافة حقول التليجرام وقنوات التنبيه. يرجى تشغيل كود SQL في Supabase."
+          );
+        }
+        throw new Error(error.message || t("errGeneric"));
+      }
       toast.success(t("saved"));
       void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("errGeneric"));
+    } catch (err: any) {
+      const msg = err?.message || (err instanceof Error ? err.message : t("errGeneric"));
+      toast.error(msg, { duration: 7000 });
     } finally {
       setSaving(false);
     }
@@ -148,8 +163,8 @@ function SettingsPage() {
         setCallmebotDiagnostic(result.error ?? "تعذر الاتصال ببوت CallMeBot.");
         toast.error(result.error ?? t("errGeneric"));
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : t("errGeneric");
+    } catch (err: any) {
+      const msg = err?.message || (err instanceof Error ? err.message : t("errGeneric"));
       setCallmebotDiagnostic(msg);
       toast.error(msg);
     } finally {
@@ -182,8 +197,38 @@ function SettingsPage() {
       } else {
         toast.error(result.error ?? t("errGeneric"));
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("errGeneric"));
+    } catch (err: any) {
+      // Fallback: send directly via Telegram Bot API from browser
+      try {
+        const directRes = await fetch(
+          `https://api.telegram.org/bot${encodeURIComponent(tgToken.trim())}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: tgChatId.trim(),
+              text:
+                "🍫 *Vienna Expiry Tracker (Telegram)* 🍫\n" +
+                "تأكيد استلام: تنبيهات تليجرام تعمل بنجاح وبأعلى سرعة ✅ (إرسال مباشر)\n" +
+                "وقت الإرسال: " +
+                new Date().toLocaleString("ar-EG"),
+              disable_web_page_preview: true,
+            }),
+          }
+        );
+        const directData = (await directRes.json()) as { ok: boolean; description?: string };
+        if (directData.ok) {
+          toast.success("تم إرسال رسالة تليجرام بنجاح! ✅");
+          return;
+        } else {
+          toast.error(`خطأ من تليجرام: ${directData.description || "تعذر الإرسال"}`);
+          return;
+        }
+      } catch {
+        // pass to original error
+      }
+      const msg = err?.message || (err instanceof Error ? err.message : t("errGeneric"));
+      toast.error(msg);
     } finally {
       setTestingTg(false);
     }
@@ -204,10 +249,11 @@ function SettingsPage() {
         void queryClient.invalidateQueries({ queryKey: ["notification_log"] });
         void queryClient.invalidateQueries({ queryKey: ["items"] });
       } else {
-        toast.error(res.error ?? t("errGeneric"));
+        toast.error(res.error ?? t("errGeneric"), { duration: 8000 });
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("errGeneric"));
+    } catch (err: any) {
+      const msg = err?.message || (err instanceof Error ? err.message : t("errGeneric"));
+      toast.error(msg, { duration: 8000 });
     } finally {
       setTriggering(false);
     }

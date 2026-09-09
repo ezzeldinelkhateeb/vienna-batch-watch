@@ -13,23 +13,44 @@ export interface TestTelegramPayload {
   chatId?: string;
 }
 
+async function safeInsertLog(entry: {
+  item_id?: string | null;
+  item_name: string;
+  status: string;
+  channel: string;
+  message: string | null;
+  phone?: string | null;
+  success: boolean;
+  error?: string | null;
+}) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("notification_log").insert(entry);
+  } catch (err) {
+    console.warn("[notification_log] Log insertion skipped (database or key pending setup):", err);
+  }
+}
+
 /** Sends a test WhatsApp message using provided inputs or saved CallMeBot credentials. */
 export const sendTestWhatsApp = createServerFn({ method: "POST" })
   .validator((data?: TestWhatsAppPayload) => data)
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
     let targetPhone = data?.phone?.trim();
     let targetKey = data?.apiKey?.trim();
 
     if (!targetPhone || !targetKey) {
-      const { data: settings } = await supabaseAdmin
-        .from("app_settings")
-        .select("whatsapp_phone, callmebot_apikey")
-        .maybeSingle();
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: settings } = await supabaseAdmin
+          .from("app_settings")
+          .select("whatsapp_phone, callmebot_apikey")
+          .maybeSingle();
 
-      targetPhone = targetPhone || settings?.whatsapp_phone || undefined;
-      targetKey = targetKey || settings?.callmebot_apikey || undefined;
+        targetPhone = targetPhone || settings?.whatsapp_phone || undefined;
+        targetKey = targetKey || settings?.callmebot_apikey || undefined;
+      } catch (err) {
+        console.warn("[sendTestWhatsApp] Could not load saved credentials from database:", err);
+      }
     }
 
     const testMessage =
@@ -50,7 +71,7 @@ export const sendTestWhatsApp = createServerFn({ method: "POST" })
 
     const result = await sendWhatsApp(targetPhone, targetKey, testMessage);
 
-    await supabaseAdmin.from("notification_log").insert({
+    await safeInsertLog({
       item_name: "رسالة تجريبية (واتساب)",
       status: "test",
       channel: "whatsapp",
@@ -72,19 +93,22 @@ export const sendTestWhatsApp = createServerFn({ method: "POST" })
 export const sendTestTelegram = createServerFn({ method: "POST" })
   .validator((data?: TestTelegramPayload) => data)
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
     let targetToken = data?.botToken?.trim();
     let targetChat = data?.chatId?.trim();
 
     if (!targetToken || !targetChat) {
-      const { data: settings } = await supabaseAdmin
-        .from("app_settings")
-        .select("telegram_bot_token, telegram_chat_id")
-        .maybeSingle();
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: settings } = await supabaseAdmin
+          .from("app_settings")
+          .select("telegram_bot_token, telegram_chat_id")
+          .maybeSingle();
 
-      targetToken = targetToken || settings?.telegram_bot_token || undefined;
-      targetChat = targetChat || settings?.telegram_chat_id || undefined;
+        targetToken = targetToken || settings?.telegram_bot_token || undefined;
+        targetChat = targetChat || settings?.telegram_chat_id || undefined;
+      } catch (err) {
+        console.warn("[sendTestTelegram] Could not load saved credentials from database:", err);
+      }
     }
 
     if (!targetToken || !targetChat) {
@@ -102,7 +126,7 @@ export const sendTestTelegram = createServerFn({ method: "POST" })
 
     const result = await sendTelegram(targetToken, targetChat, testMessage);
 
-    await supabaseAdmin.from("notification_log").insert({
+    await safeInsertLog({
       item_name: "رسالة تجريبية (تليجرام)",
       status: "test",
       channel: "telegram",
@@ -172,7 +196,7 @@ export async function runExpiryCheckEngine() {
     // Send WhatsApp if configured and enabled
     if (channel === "both" || channel === "whatsapp") {
       if (!settings?.whatsapp_phone || !settings?.callmebot_apikey) {
-        await supabaseAdmin.from("notification_log").insert({
+        await safeInsertLog({
           item_id: item.id,
           item_name: item.name,
           status,
@@ -188,7 +212,7 @@ export async function runExpiryCheckEngine() {
           settings.callmebot_apikey,
           message,
         );
-        await supabaseAdmin.from("notification_log").insert({
+        await safeInsertLog({
           item_id: item.id,
           item_name: item.name,
           status,
@@ -205,7 +229,7 @@ export async function runExpiryCheckEngine() {
     // Send Telegram if configured and enabled
     if (channel === "both" || channel === "telegram") {
       if (!settings?.telegram_bot_token || !settings?.telegram_chat_id) {
-        await supabaseAdmin.from("notification_log").insert({
+        await safeInsertLog({
           item_id: item.id,
           item_name: item.name,
           status,
@@ -221,7 +245,7 @@ export async function runExpiryCheckEngine() {
           settings.telegram_chat_id,
           message,
         );
-        await supabaseAdmin.from("notification_log").insert({
+        await safeInsertLog({
           item_id: item.id,
           item_name: item.name,
           status,

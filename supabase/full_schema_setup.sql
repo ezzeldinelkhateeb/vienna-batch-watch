@@ -147,12 +147,15 @@ CREATE TABLE IF NOT EXISTS public.notification_log (
   error text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-GRANT SELECT ON public.notification_log TO authenticated;
+GRANT SELECT, INSERT ON public.notification_log TO authenticated;
 GRANT ALL ON public.notification_log TO service_role;
 ALTER TABLE public.notification_log ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "log read" ON public.notification_log;
 CREATE POLICY "log read" ON public.notification_log FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "log insert" ON public.notification_log;
+CREATE POLICY "log insert" ON public.notification_log FOR INSERT TO authenticated WITH CHECK (true);
 
 -- 8. Triggers
 CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
