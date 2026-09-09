@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "vite build"
+  "buildCommand": "vite build",
+  "crons": [
+    {
+      "path": "/api/public/hooks/expiry-check",
+      "schedule": "0 8 * * *"
+    }
+  ]
 }
