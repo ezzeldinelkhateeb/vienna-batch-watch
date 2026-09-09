@@ -130,7 +130,7 @@ recalculate automatically every day with no manual action needed.
 
 - Next to every item, show a clear, human-readable countdown, e.g.
 
-  *"2 months and 5 days left (65 days)"*, and for expired items show *"Expired
+  _"2 months and 5 days left (65 days)"_, and for expired items show *"Expired
 
   16 days ago"*. This must also recompute live from the real current date.
 
@@ -198,7 +198,7 @@ recalculate automatically every day with no manual action needed.
 
 - Implement this with a proper i18n approach (e.g. a translation dictionary
 
-  + React context), not scattered hardcoded strings.
+  - React context), not scattered hardcoded strings.
 
 - Default language on first load: Arabic.
 

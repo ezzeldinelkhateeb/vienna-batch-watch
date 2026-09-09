@@ -27,7 +27,10 @@ export async function sendWhatsApp(
   try {
     const res = await fetch(url, { method: "GET" });
     const body = await res.text();
-    const cleanBody = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    const cleanBody = body
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     const lowered = body.toLowerCase();
 
     if (!res.ok) {

@@ -23,9 +23,7 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
         <Link
           to="/"
           className={`flex flex-col items-center justify-center gap-1 px-3 py-1 transition-colors ${
-            isInventory
-              ? "text-brand font-semibold"
-              : "text-muted-foreground hover:text-foreground"
+            isInventory ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <div
@@ -93,9 +91,7 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
         <Link
           to="/settings"
           className={`flex flex-col items-center justify-center gap-1 px-3 py-1 transition-colors ${
-            isSettings
-              ? "text-brand font-semibold"
-              : "text-muted-foreground hover:text-foreground"
+            isSettings ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <div

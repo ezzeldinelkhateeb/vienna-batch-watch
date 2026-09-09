@@ -14,7 +14,6 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { I18nProvider } from "../lib/i18n";
 import { Toaster } from "../components/ui/sonner";
 
-
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -79,7 +78,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" },
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
+      },
       { name: "author", content: "Vienna — High Quality Chocolate" },
       { name: "theme-color", content: "#5c2c16" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
@@ -137,4 +139,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

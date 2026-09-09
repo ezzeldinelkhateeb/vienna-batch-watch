@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -33,6 +34,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -59,36 +61,61 @@ function AuthPage() {
     <div className="min-h-screen bg-background">
       <AppHeader showNav={false} />
       <main className="mx-auto w-full max-w-md px-4 py-10 sm:py-16">
-        <div className="rounded-2xl border bg-card p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-cocoa">{t("loginTitle")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("loginSubtitle")}</p>
+        <div className="rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-md">
+          <div className="text-center sm:text-start mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold text-cocoa">{t("loginTitle")}</h1>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">{t("loginSubtitle")}</p>
+          </div>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("email")}</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                placeholder="name@vienna.com"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+              <div className="relative">
+                <Mail className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  placeholder="name@vienna.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="ps-9"
+                />
+              </div>
             </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="password">{t("password")}</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={6}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Lock className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={6}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="ps-9 pe-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute end-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                  title={t("togglePassword")}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
-            <Button type="submit" className="w-full" disabled={busy}>
+
+            <Button
+              type="submit"
+              className="w-full bg-brand hover:bg-brand/90 text-white shadow-sm mt-2"
+              disabled={busy}
+            >
               {busy ? t("loading") : t("signIn")}
             </Button>
           </form>

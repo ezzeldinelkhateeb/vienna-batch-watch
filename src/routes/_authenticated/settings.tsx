@@ -9,6 +9,10 @@ import {
   PlayCircle,
   Send,
   ShieldAlert,
+  Users,
+  Clock,
+  Settings as SettingsIcon,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +26,7 @@ import {
 } from "@/lib/whatsapp.functions";
 import { buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { AppHeader } from "@/components/AppHeader";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { TeamManagement } from "@/components/TeamManagement";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +57,8 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
+type SettingsTab = "alerts" | "thresholds" | "team";
+
 function SettingsPage() {
   const { t, lang } = useI18n();
   const { session, isAdmin } = useAuth();
@@ -61,6 +68,8 @@ function SettingsPage() {
   const sendWaTest = useServerFn(sendTestWhatsApp);
   const sendTgTest = useServerFn(sendTestTelegram);
   const runCheckNow = useServerFn(triggerExpiryCheckNow);
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>("alerts");
 
   // WhatsApp state
   const [phone, setPhone] = useState("");
@@ -207,196 +216,305 @@ function SettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
-      <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-        {isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
 
-        {/* Manual Instant Trigger Card */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border bg-gradient-to-r from-amber-500/10 via-brand/10 to-amber-500/5 p-5 shadow-sm">
+      <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
+        {/* Page Title */}
+        <div className="flex items-center gap-2">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <SettingsIcon className="size-4" />
+          </div>
           <div>
-            <h2 className="text-base font-semibold text-cocoa flex items-center gap-2">
-              <PlayCircle className="size-5 text-brand" />
-              {t("triggerCheckNow")}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <h1 className="text-xl font-bold text-cocoa">{t("settings")}</h1>
+            <p className="text-xs text-muted-foreground">
               {lang === "ar"
-                ? "تشغيل فحص فوري لكافة شحنات المواد الخام، وإرسال التنبيهات اللازمة للمواد التي شارفت على الانتهاء فوراً."
-                : "Instantly evaluate raw material expiries and dispatch alerts for all urgent batches right now."}
+                ? "إعدادات قنوات الإرسال التلقائي، وحدود صلاحية المواد، وصلاحيات الفريق."
+                : "Manage alert channels, threshold warnings, and team permissions."}
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={handleManualCheck}
-            disabled={triggering}
-            className="shrink-0 gap-2 bg-brand hover:bg-brand/90 text-white shadow-sm"
-          >
-            <PlayCircle className="size-4" />
-            {triggering ? t("triggeringCheck") : t("triggerCheckNow")}
-          </Button>
         </div>
 
-        <form onSubmit={save} className="space-y-6 rounded-xl border bg-card p-6 shadow-sm">
-          {/* Section 1: WhatsApp Settings */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+        {/* Segmented Tabs Navigation */}
+        <div className="flex rounded-xl border border-border/80 bg-muted/50 p-1 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab("alerts")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+              activeTab === "alerts"
+                ? "bg-card text-cocoa font-semibold shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <MessageCircle className="size-4 text-brand" />
+            <span>{t("tabSettingsAlerts")}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("thresholds")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+              activeTab === "thresholds"
+                ? "bg-card text-cocoa font-semibold shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Clock className="size-4 text-brand" />
+            <span>{t("tabSettingsThresholds")}</span>
+          </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("team")}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+                activeTab === "team"
+                  ? "bg-card text-cocoa font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Users className="size-4 text-brand" />
+              <span>{t("tabSettingsTeam")}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tab 1: Alert Channels & Manual Check */}
+        {activeTab === "alerts" && (
+          <div className="space-y-5">
+            {/* Manual Instant Trigger Card */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border bg-gradient-to-r from-amber-500/10 via-brand/10 to-amber-500/5 p-4 sm:p-5 shadow-sm">
               <div>
-                <h1 className="text-lg font-semibold text-cocoa flex items-center gap-2">
-                  <MessageCircle className="size-5 text-[#25D366]" />
-                  {t("whatsappSettings")}
-                </h1>
-                <p className="mt-1 text-xs text-muted-foreground">{t("callmebotHint")}</p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">{t("phone")}</Label>
-                <Input
-                  id="phone"
-                  dir="ltr"
-                  placeholder="+201026017665"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="apikey">{t("apiKey")}</Label>
-                <Input
-                  id="apikey"
-                  dir="ltr"
-                  placeholder="7250276"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {callmebotDiagnostic && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-950 dark:text-amber-200 space-y-1.5">
-                <div className="flex items-center gap-1.5 font-semibold text-amber-900 dark:text-amber-300">
-                  <AlertTriangle className="size-4 shrink-0 text-amber-600" />
-                  <span>{lang === "ar" ? "تشخيص سيرفر CallMeBot:" : "CallMeBot Server Diagnostic:"}</span>
-                </div>
-                <p>{callmebotDiagnostic}</p>
-                <p className="text-[11px] opacity-80">
+                <h2 className="text-sm sm:text-base font-semibold text-cocoa flex items-center gap-2">
+                  <PlayCircle className="size-5 text-brand" />
+                  {t("triggerCheckNow")}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {lang === "ar"
-                    ? "💡 نصيحة: إذا كان سيرفر CallMeBot يمر بأعمال صيانة من المصدر، يمكنك استخدام زر 'فتح في واتساب ويب / التطبيق مباشرة' أدناه، أو تفعيل تنبيهات بوت تليجرام المستقرة 100%."
-                    : "💡 Tip: If CallMeBot is experiencing maintenance, you can use 'Open in WhatsApp Web/App' below, or activate 100% reliable Telegram Bot alerts."}
+                    ? "تشغيل فحص فوري لكافة شحنات المواد الخام، وإرسال التنبيهات اللازمة للمواد التي شارفت على الانتهاء فوراً."
+                    : "Instantly evaluate raw material expiries and dispatch alerts for all urgent batches right now."}
                 </p>
               </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
               <Button
                 type="button"
-                variant="outline"
-                onClick={testWhatsAppBot}
-                disabled={testingWa}
-                className="gap-2 text-xs"
+                onClick={handleManualCheck}
+                disabled={triggering}
+                className="shrink-0 gap-2 bg-brand hover:bg-brand/90 text-white shadow-sm text-xs"
               >
-                <Send className="size-3.5" />
-                {testingWa ? t("sending") : t("sendTest")}
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={openDirectWhatsApp}
-                className="gap-2 text-xs text-[#128C7E] hover:text-[#075E54] border border-[#25D366]/30 bg-[#25D366]/10"
-              >
-                <ExternalLink className="size-3.5" />
-                {t("openWhatsAppDirect")}
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">{t("whatsappDirectHint")}</p>
-          </div>
-
-          {/* Section 2: Telegram Bot Settings */}
-          <div className="space-y-4 border-t pt-5">
-            <div>
-              <h2 className="text-lg font-semibold text-cocoa flex items-center gap-2">
-                <Send className="size-5 text-[#229ED9]" />
-                {t("telegramSettings")}
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">{t("telegramHint")}</p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="tgToken">{t("telegramBotToken")}</Label>
-                <Input
-                  id="tgToken"
-                  dir="ltr"
-                  type="password"
-                  placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-                  value={tgToken}
-                  onChange={(e) => setTgToken(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tgChatId">{t("telegramChatId")}</Label>
-                <Input
-                  id="tgChatId"
-                  dir="ltr"
-                  placeholder="-100123456789 or 987654321"
-                  value={tgChatId}
-                  onChange={(e) => setTgChatId(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={testTelegramBot}
-                disabled={testingTg}
-                className="gap-2 text-xs"
-              >
-                <Send className="size-3.5 text-[#229ED9]" />
-                {testingTg ? t("sending") : t("sendTestTelegram")}
+                <PlayCircle className="size-4" />
+                {triggering ? t("triggeringCheck") : t("triggerCheckNow")}
               </Button>
             </div>
 
-            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-semibold text-cocoa">
-                {lang === "ar" ? "كيفية إعداد بوت تليجرام في دقيقة واحدة:" : "How to set up Telegram Bot in 1 minute:"}
-              </p>
-              <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
-                <li>{lang === "ar" ? "تحدث مع @BotFather على تليجرام واكتب /newbot لإنشاء بوتك والحصول على الـ Token." : "Message @BotFather on Telegram, send /newbot to create your bot and copy the Token."}</li>
-                <li>{lang === "ar" ? "أرسل أي رسالة للبوت الجديد، ثم افتح @userinfobot لمعرفة الـ Chat ID الخاص بك أو أضف البوت لمجموعة وانسخ ID المجموعة." : "Message your new bot, then open @userinfobot to get your Chat ID, or add the bot to your team group."}</li>
-                <li>{lang === "ar" ? "الصق الـ Token والـ Chat ID هنا واضغط 'إرسال تجربة'." : "Paste the Token and Chat ID above and click 'Send Telegram Test'."}</li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Section 3: Notification Channel Selection */}
-          <div className="space-y-3 border-t pt-5">
-            <Label className="text-sm font-semibold text-cocoa">{t("notifyChannel")}</Label>
-            <Select
-              value={notifyChannel}
-              onValueChange={(val) => setNotifyChannel(val as "both" | "whatsapp" | "telegram")}
+            <form
+              onSubmit={save}
+              className="space-y-6 rounded-xl border bg-card p-5 sm:p-6 shadow-sm"
             >
-              <SelectTrigger className="w-full sm:w-80">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="both">{t("channelBoth")}</SelectItem>
-                <SelectItem value="whatsapp">{t("channelWhatsApp")}</SelectItem>
-                <SelectItem value="telegram">{t("channelTelegram")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              {/* WhatsApp Settings */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-cocoa flex items-center gap-2">
+                      <MessageCircle className="size-5 text-[#25D366]" />
+                      {t("whatsappSettings")}
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("callmebotHint")}</p>
+                  </div>
+                </div>
 
-          {/* Section 4: Warning Thresholds */}
-          <div className="space-y-3 border-t pt-5">
-            <h2 className="text-sm font-semibold text-cocoa">{t("thresholds")}</h2>
-            {!isAdmin && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <ShieldAlert className="size-3.5 text-amber-600" />
-                {t("adminOnly")}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">{t("phone")}</Label>
+                    <Input
+                      id="phone"
+                      dir="ltr"
+                      placeholder="+201026017665"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="apikey">{t("apiKey")}</Label>
+                    <Input
+                      id="apikey"
+                      dir="ltr"
+                      placeholder="7250276"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {callmebotDiagnostic && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-950 dark:text-amber-200 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-amber-900 dark:text-amber-300">
+                      <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                      <span>
+                        {lang === "ar" ? "تشخيص سيرفر CallMeBot:" : "CallMeBot Server Diagnostic:"}
+                      </span>
+                    </div>
+                    <p>{callmebotDiagnostic}</p>
+                    <p className="text-[11px] opacity-80">
+                      {lang === "ar"
+                        ? "💡 نصيحة: إذا كان سيرفر CallMeBot يمر بأعمال صيانة من المصدر، يمكنك استخدام زر 'فتح في واتساب ويب / التطبيق مباشرة' أدناه، أو تفعيل تنبيهات بوت تليجرام المستقرة 100%."
+                        : "💡 Tip: If CallMeBot is experiencing maintenance, you can use 'Open in WhatsApp Web/App' below, or activate 100% reliable Telegram Bot alerts."}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={testWhatsAppBot}
+                    disabled={testingWa}
+                    className="gap-2 text-xs"
+                  >
+                    <Send className="size-3.5" />
+                    {testingWa ? t("sending") : t("sendTest")}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={openDirectWhatsApp}
+                    className="gap-2 text-xs text-[#128C7E] hover:text-[#075E54] border border-[#25D366]/30 bg-[#25D366]/10"
+                  >
+                    <ExternalLink className="size-3.5" />
+                    {t("openWhatsAppDirect")}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">{t("whatsappDirectHint")}</p>
+              </div>
+
+              {/* Telegram Bot Settings */}
+              <div className="space-y-4 border-t pt-5">
+                <div>
+                  <h2 className="text-base font-semibold text-cocoa flex items-center gap-2">
+                    <Send className="size-5 text-[#229ED9]" />
+                    {t("telegramSettings")}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("telegramHint")}</p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tgToken">{t("telegramBotToken")}</Label>
+                    <Input
+                      id="tgToken"
+                      dir="ltr"
+                      type="password"
+                      placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                      value={tgToken}
+                      onChange={(e) => setTgToken(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tgChatId">{t("telegramChatId")}</Label>
+                    <Input
+                      id="tgChatId"
+                      dir="ltr"
+                      placeholder="-100123456789 or 987654321"
+                      value={tgChatId}
+                      onChange={(e) => setTgChatId(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={testTelegramBot}
+                    disabled={testingTg}
+                    className="gap-2 text-xs"
+                  >
+                    <Send className="size-3.5 text-[#229ED9]" />
+                    {testingTg ? t("sending") : t("sendTestTelegram")}
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-cocoa">
+                    {lang === "ar"
+                      ? "كيفية إعداد بوت تليجرام في دقيقة واحدة:"
+                      : "How to set up Telegram Bot in 1 minute:"}
+                  </p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                    <li>
+                      {lang === "ar"
+                        ? "تحدث مع @BotFather على تليجرام واكتب /newbot لإنشاء بوتك والحصول على الـ Token."
+                        : "Message @BotFather on Telegram, send /newbot to create your bot and copy the Token."}
+                    </li>
+                    <li>
+                      {lang === "ar"
+                        ? "أرسل أي رسالة للبوت الجديد، ثم افتح @userinfobot لمعرفة الـ Chat ID الخاص بك أو أضف البوت لمجموعة وانسخ ID المجموعة."
+                        : "Message your new bot, then open @userinfobot to get your Chat ID, or add the bot to your team group."}
+                    </li>
+                    <li>
+                      {lang === "ar"
+                        ? "الصق الـ Token والـ Chat ID هنا واضغط 'إرسال تجربة'."
+                        : "Paste the Token and Chat ID above and click 'Send Telegram Test'."}
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Notification Channel Selection */}
+              <div className="space-y-3 border-t pt-5">
+                <Label className="text-sm font-semibold text-cocoa">{t("notifyChannel")}</Label>
+                <Select
+                  value={notifyChannel}
+                  onValueChange={(val) => setNotifyChannel(val as "both" | "whatsapp" | "telegram")}
+                >
+                  <SelectTrigger className="w-full sm:w-80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="both">{t("channelBoth")}</SelectItem>
+                    <SelectItem value="whatsapp">{t("channelWhatsApp")}</SelectItem>
+                    <SelectItem value="telegram">{t("channelTelegram")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="border-t pt-4">
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-brand text-white hover:bg-brand/90"
+                >
+                  {saving ? t("saving") : t("save")}
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Tab 2: Warning Thresholds */}
+        {activeTab === "thresholds" && (
+          <form
+            onSubmit={save}
+            className="space-y-5 rounded-xl border bg-card p-5 sm:p-6 shadow-sm"
+          >
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-cocoa flex items-center gap-2">
+                <Clock className="size-5 text-brand" />
+                {t("thresholds")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {lang === "ar"
+                  ? "تحديد عدد الأيام المتبقية لبدء إرسال التنبيهات المبكرة والمتوسطة والحرجة."
+                  : "Configure when early, medium, and critical expiry warnings trigger."}
               </p>
+            </div>
+
+            {!isAdmin && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                <ShieldAlert className="size-4 shrink-0" />
+                <span>{t("adminOnly")}</span>
+              </div>
             )}
-            <div className="grid gap-3 sm:grid-cols-3">
+
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="early">{t("thresholdEarly")}</Label>
                 <Input
@@ -431,16 +549,26 @@ function SettingsPage() {
                 />
               </div>
             </div>
-          </div>
 
-          {/* Submit Button */}
-          <div className="border-t pt-4 flex flex-wrap gap-2">
-            <Button type="submit" disabled={saving} className="bg-brand text-white hover:bg-brand/90">
-              {saving ? t("saving") : t("save")}
-            </Button>
-          </div>
-        </form>
+            {isAdmin && (
+              <div className="border-t pt-4">
+                <Button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-brand text-white hover:bg-brand/90"
+                >
+                  {saving ? t("saving") : t("save")}
+                </Button>
+              </div>
+            )}
+          </form>
+        )}
+
+        {/* Tab 3: Team Management */}
+        {activeTab === "team" && isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
       </main>
+
+      <MobileBottomNav />
     </div>
   );
 }

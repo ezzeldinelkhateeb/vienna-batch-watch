@@ -40,7 +40,8 @@ export async function sendTelegram(
       if (desc.includes("Not Found") || desc.includes("Unauthorized")) {
         arabicDesc = "رمز البوت (Bot Token) غير صالح. تأكد من نسخه بدقة من @BotFather.";
       } else if (desc.includes("chat not found")) {
-        arabicDesc = "معرّف المحادثة (Chat ID) غير موجود أو لم يتم بدء المحادثة مع البوت بعد (اضغط Start في البوت).";
+        arabicDesc =
+          "معرّف المحادثة (Chat ID) غير موجود أو لم يتم بدء المحادثة مع البوت بعد (اضغط Start في البوت).";
       } else if (desc.includes("bot was blocked by the user")) {
         arabicDesc = "البوت محظور من قِبل المستخدم. يرجى إلغاء الحظر وإعادة المحاولة.";
       }

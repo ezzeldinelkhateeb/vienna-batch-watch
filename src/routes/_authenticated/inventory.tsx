@@ -27,13 +27,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { signedPhotoUrls } from "@/lib/photos";
 import { countdownText } from "@/lib/format";
-import {
-  STATUS_ORDER,
-  STATUS_TINT,
-  daysUntil,
-  statusFor,
-  type Status,
-} from "@/lib/status";
+import { STATUS_ORDER, STATUS_TINT, daysUntil, statusFor, type Status } from "@/lib/status";
 import { AppHeader } from "@/components/AppHeader";
 import { StatusLegend } from "@/components/StatusLegend";
 import { StatusPill, STATUS_LABEL_KEY, QcBadge, type QcStatusType } from "@/components/StatusPill";
@@ -76,7 +70,7 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 });
 
 function InventoryPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const settings = useSettings();
@@ -341,10 +335,7 @@ function InventoryPage() {
             </Button>
           </div>
 
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as "all" | Status)}
-          >
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | Status)}>
             <SelectTrigger className="sm:w-48">
               <SelectValue />
             </SelectTrigger>
@@ -358,10 +349,7 @@ function InventoryPage() {
             </SelectContent>
           </Select>
 
-          <Select
-            value={qcFilter}
-            onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}
-          >
+          <Select value={qcFilter} onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}>
             <SelectTrigger className="sm:w-44">
               <SelectValue />
             </SelectTrigger>
@@ -455,7 +443,9 @@ function InventoryPage() {
                             </span>
                           )}
                         </div>
-                        <h2 className="text-base font-semibold text-cocoa leading-tight">{item.name}</h2>
+                        <h2 className="text-base font-semibold text-cocoa leading-tight">
+                          {item.name}
+                        </h2>
                         <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
                       </div>
                       <ProductImageThumbnail
@@ -489,8 +479,12 @@ function InventoryPage() {
                     <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
                       <div>
                         <span className="text-muted-foreground block">{t("expiryDate")}</span>
-                        <span className="font-medium font-mono text-foreground">{item.expiry_date}</span>
-                        <span className="block text-[10px] text-muted-foreground">{countdownText(days, t)}</span>
+                        <span className="font-medium font-mono text-foreground">
+                          {item.expiry_date}
+                        </span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          {countdownText(days, t)}
+                        </span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block">{t("quantity")}</span>

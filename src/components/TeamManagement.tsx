@@ -68,7 +68,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       toast.error(
         lang === "ar"
           ? "يجب إدخال بريد إلكتروني صحيح وكلمة مرور لا تقل عن 6 أحرف"
-          : "Please provide a valid email and password with at least 6 characters"
+          : "Please provide a valid email and password with at least 6 characters",
       );
       return;
     }
@@ -76,17 +76,20 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
     setCreating(true);
     try {
       // 1. Primary method: Direct Database RPC function (Zero emails, Zero rate limits, Instant confirmation)
-      const { data: rpcUserId, error: rpcError } = await supabase.rpc("create_team_member" as never, {
-        _email: email.trim().toLowerCase(),
-        _password: password,
-        _role: role,
-      } as never);
+      const { data: rpcUserId, error: rpcError } = await supabase.rpc(
+        "create_team_member" as never,
+        {
+          _email: email.trim().toLowerCase(),
+          _password: password,
+          _role: role,
+        } as never,
+      );
 
       if (!rpcError) {
         toast.success(
           lang === "ar"
             ? `تم إنشاء حساب ${email} بنجاح كـ (${role === "admin" ? "مدير نظام" : "مسؤول جودة/مخزن"})!`
-            : `Account ${email} created successfully as (${role})!`
+            : `Account ${email} created successfully as (${role})!`,
         );
 
         setEmail("");
@@ -121,7 +124,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
           toast.error(
             lang === "ar"
               ? "تنبيه: تم تجاوز حد إرسال الإيميلات. يُرجى تشغيل كود SQL الخاص بدالة create_team_member في لوحة سوبابيز للإنشاء الفوري المباشر، أو إلغاء تفعيل Confirm Email."
-              : "Email rate limit exceeded. Please run the SQL migration for create_team_member or disable 'Confirm email' in Supabase."
+              : "Email rate limit exceeded. Please run the SQL migration for create_team_member or disable 'Confirm email' in Supabase.",
           );
           return;
         }
@@ -139,7 +142,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       toast.success(
         lang === "ar"
           ? `تم إنشاء حساب ${email} بنجاح كـ (${role === "admin" ? "مدير نظام" : "مسؤول جودة/مخزن"})!`
-          : `Account ${email} created successfully as (${role})!`
+          : `Account ${email} created successfully as (${role})!`,
       );
 
       setEmail("");
@@ -159,7 +162,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       toast.error(
         lang === "ar"
           ? "لا يمكنك تغيير صلاحية حسابك الحالي بنفسك"
-          : "You cannot change your own admin role"
+          : "You cannot change your own admin role",
       );
       return;
     }
@@ -175,7 +178,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       toast.success(
         lang === "ar"
           ? `تم تعديل صلاحية ${member.email} إلى ${newRole === "admin" ? "مدير نظام (Admin)" : "مسؤول جودة (Member)"}`
-          : `Updated role for ${member.email} to ${newRole}`
+          : `Updated role for ${member.email} to ${newRole}`,
       );
       void fetchMembers();
     } catch (err) {
@@ -242,7 +245,9 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
 
                 <div className="space-y-1.5">
                   <Label htmlFor="new-user-pwd">
-                    {lang === "ar" ? "كلمة المرور الأولية (6 أحرف فأكثر)" : "Initial Password (min 6)"}
+                    {lang === "ar"
+                      ? "كلمة المرور الأولية (6 أحرف فأكثر)"
+                      : "Initial Password (min 6)"}
                   </Label>
                   <Input
                     id="new-user-pwd"
@@ -266,10 +271,14 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="member">
-                      {lang === "ar" ? "مسؤول جودة / أمين مخزن (Member)" : "QC Inspector / Storekeeper (Member)"}
+                      {lang === "ar"
+                        ? "مسؤول جودة / أمين مخزن (Member)"
+                        : "QC Inspector / Storekeeper (Member)"}
                     </option>
                     <option value="admin">
-                      {lang === "ar" ? "مدير نظام كامل الصلاحيات (Admin)" : "Full System Administrator (Admin)"}
+                      {lang === "ar"
+                        ? "مدير نظام كامل الصلاحيات (Admin)"
+                        : "Full System Administrator (Admin)"}
                     </option>
                   </select>
                 </div>
@@ -291,8 +300,12 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                   </Button>
                   <Button type="submit" disabled={creating}>
                     {creating
-                      ? lang === "ar" ? "جارٍ الإنشاء…" : "Creating…"
-                      : lang === "ar" ? "إنشاء الحساب" : "Create Account"}
+                      ? lang === "ar"
+                        ? "جارٍ الإنشاء…"
+                        : "Creating…"
+                      : lang === "ar"
+                        ? "إنشاء الحساب"
+                        : "Create Account"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -305,8 +318,12 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
         {members.length === 0 ? (
           <div className="py-6 text-center text-xs text-muted-foreground">
             {loading
-              ? lang === "ar" ? "جارٍ تحميل المستخدمين…" : "Loading members…"
-              : lang === "ar" ? "لا يوجد مستخدمون مسجلون بعد" : "No users found"}
+              ? lang === "ar"
+                ? "جارٍ تحميل المستخدمين…"
+                : "Loading members…"
+              : lang === "ar"
+                ? "لا يوجد مستخدمون مسجلون بعد"
+                : "No users found"}
           </div>
         ) : (
           members.map((m) => {
@@ -342,8 +359,12 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {isAdminRole
-                        ? lang === "ar" ? "مدير نظام كامل (Admin)" : "System Administrator"
-                        : lang === "ar" ? "مسؤول جودة / مخزن (Member)" : "QC Inspector / Storekeeper"}
+                        ? lang === "ar"
+                          ? "مدير نظام كامل (Admin)"
+                          : "System Administrator"
+                        : lang === "ar"
+                          ? "مسؤول جودة / مخزن (Member)"
+                          : "QC Inspector / Storekeeper"}
                     </div>
                   </div>
                 </div>
@@ -357,8 +378,12 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                     className="h-7 text-xs"
                   >
                     {isAdminRole
-                      ? lang === "ar" ? "تحويل إلى Member" : "Demote to Member"
-                      : lang === "ar" ? "ترقية إلى Admin" : "Promote to Admin"}
+                      ? lang === "ar"
+                        ? "تحويل إلى Member"
+                        : "Demote to Member"
+                      : lang === "ar"
+                        ? "ترقية إلى Admin"
+                        : "Promote to Admin"}
                   </Button>
                 )}
               </div>

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Lang = "ar" | "en";
 
@@ -203,6 +196,24 @@ const en: Dict = {
   mobileNavScan: "Scan Barcode",
   mobileNavAdd: "Add Item",
   refresh: "Refresh",
+
+  // Notifications Log & Details
+  notificationsStatsTotal: "Total Alerts",
+  notificationsStatsSuccess: "Delivered",
+  notificationsStatsFailed: "Failed",
+  notificationsSearch: "Search alerts by item or message…",
+  notificationDetails: "Alert Message Details",
+  viewAlertDetails: "View Message",
+  copyMessage: "Copy Message",
+  copied: "Copied to clipboard",
+  tabAll: "All",
+  tabSettingsAlerts: "Alert Channels",
+  tabSettingsThresholds: "Warning Days",
+  tabSettingsTeam: "Team & Roles",
+  togglePassword: "Show / hide password",
+  cameraTorch: "Flashlight",
+  cameraFlip: "Flip Camera",
+  sentTimeAgo: "{time} ago",
 };
 
 const ar: Dict = {
@@ -397,6 +408,24 @@ const ar: Dict = {
   mobileNavScan: "مسح باركود",
   mobileNavAdd: "إضافة صنف",
   refresh: "تحديث",
+
+  // Notifications Log & Details
+  notificationsStatsTotal: "إجمالي التنبيهات",
+  notificationsStatsSuccess: "تم التسليم",
+  notificationsStatsFailed: "فشل الإرسال",
+  notificationsSearch: "ابحث في التنبيهات بالاسم أو نص الرسالة…",
+  notificationDetails: "تفاصيل نص التنبيه",
+  viewAlertDetails: "عرض الرسالة",
+  copyMessage: "نسخ النص",
+  copied: "تم النسخ بنجاح",
+  tabAll: "الكل",
+  tabSettingsAlerts: "قنوات التنبيه",
+  tabSettingsThresholds: "حدود التحذير",
+  tabSettingsTeam: "إدارة الفريق",
+  togglePassword: "إظهار / إخفاء كلمة المرور",
+  cameraTorch: "كشاف الإضاءة",
+  cameraFlip: "تبديل الكاميرا",
+  sentTimeAgo: "منذ {time}",
 };
 
 const dicts: Record<Lang, Dict> = { ar, en };

@@ -236,9 +236,7 @@ export function ProductImageViewerDialog({
         className="fixed inset-0 z-50 flex h-[100dvh] w-screen max-w-none flex-col border-none bg-black/92 p-0 text-white backdrop-blur-xl outline-none shadow-2xl overflow-hidden select-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
         aria-describedby={undefined}
       >
-        <DialogTitle className="sr-only">
-          {item.name || "Product Image Viewer"}
-        </DialogTitle>
+        <DialogTitle className="sr-only">{item.name || "Product Image Viewer"}</DialogTitle>
 
         {/* Top Header Bar */}
         <div className="relative z-30 flex items-center justify-between border-b border-white/10 bg-gradient-to-b from-black/80 to-transparent px-4 py-3 sm:px-6">
@@ -312,11 +310,7 @@ export function ProductImageViewerDialog({
           onTouchEnd={handleTouchEnd}
           onDoubleClick={(e) => handleDoubleTapOrClick(e.clientX, e.clientY)}
           className={`relative flex flex-1 items-center justify-center overflow-hidden touch-none ${
-            isDragging
-              ? "cursor-grabbing"
-              : zoom > 1
-                ? "cursor-grab"
-                : "cursor-zoom-in"
+            isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-zoom-in"
           }`}
         >
           {/* Subtle loading spinner until image renders */}
@@ -408,12 +402,8 @@ export function ProductImageViewerDialog({
               </div>
             )}
 
-            <p className="hidden md:inline text-[11px] text-white/50">
-              {t("zoomHint")}
-            </p>
-            <p className="inline md:hidden text-[11px] text-white/50">
-              {t("doubleTapHint")}
-            </p>
+            <p className="hidden md:inline text-[11px] text-white/50">{t("zoomHint")}</p>
+            <p className="inline md:hidden text-[11px] text-white/50">{t("doubleTapHint")}</p>
           </div>
         </div>
       </DialogContent>

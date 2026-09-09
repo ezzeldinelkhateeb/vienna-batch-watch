@@ -4,12 +4,7 @@ import { type ItemRow } from "@/components/ItemFormDialog";
 import { type Status, daysUntil, statusFor, type Thresholds } from "@/lib/status";
 import { STATUS_LABEL_KEY } from "@/components/StatusPill";
 import { countdownText } from "@/lib/format";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -32,7 +27,9 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
     day: "numeric",
   });
 
-  const quarantineCount = items.filter((i) => (i.qc_status ?? "quarantine") === "quarantine").length;
+  const quarantineCount = items.filter(
+    (i) => (i.qc_status ?? "quarantine") === "quarantine",
+  ).length;
   const approvedCount = items.filter((i) => i.qc_status === "approved").length;
   const rejectedCount = items.filter((i) => i.qc_status === "rejected").length;
   const criticalCount = items.filter((i) => {
@@ -60,19 +57,20 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b-2 border-cocoa pb-4">
             <div>
-              <h1 className="font-serif text-3xl font-bold tracking-tight text-cocoa">
-                Vienna
-              </h1>
+              <h1 className="font-serif text-3xl font-bold tracking-tight text-cocoa">Vienna</h1>
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 High Quality Chocolate — QA & QC Department
               </p>
-              <h2 className="mt-2 text-base font-semibold text-cocoa">
-                {t("qcReportTitle")}
-              </h2>
+              <h2 className="mt-2 text-base font-semibold text-cocoa">{t("qcReportTitle")}</h2>
             </div>
             <div className="mt-3 sm:mt-0 text-xs text-muted-foreground text-start sm:text-end">
-              <p><span className="font-semibold text-foreground">{t("reportDate")}:</span> {todayStr}</p>
-              <p><span className="font-semibold text-foreground">{t("totalItems")}:</span> {items.length} {t("item")}</p>
+              <p>
+                <span className="font-semibold text-foreground">{t("reportDate")}:</span> {todayStr}
+              </p>
+              <p>
+                <span className="font-semibold text-foreground">{t("totalItems")}:</span>{" "}
+                {items.length} {t("item")}
+              </p>
             </div>
           </div>
 
@@ -80,11 +78,15 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-center dark:bg-amber-950/20">
               <p className="text-xs text-amber-900 dark:text-amber-300">{t("quarantine")}</p>
-              <p className="text-xl font-bold text-amber-950 dark:text-amber-200">{quarantineCount}</p>
+              <p className="text-xl font-bold text-amber-950 dark:text-amber-200">
+                {quarantineCount}
+              </p>
             </div>
             <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-2.5 text-center dark:bg-emerald-950/20">
               <p className="text-xs text-emerald-900 dark:text-emerald-300">{t("approved")}</p>
-              <p className="text-xl font-bold text-emerald-950 dark:text-emerald-200">{approvedCount}</p>
+              <p className="text-xl font-bold text-emerald-950 dark:text-emerald-200">
+                {approvedCount}
+              </p>
             </div>
             <div className="rounded-lg border border-rose-300 bg-rose-50 p-2.5 text-center dark:bg-rose-950/20">
               <p className="text-xs text-rose-900 dark:text-rose-300">{t("rejected")}</p>
@@ -121,7 +123,9 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                     <tr key={it.id} className="odd:bg-background even:bg-muted/20">
                       <td className="p-2 font-mono">{idx + 1}</td>
                       <td className="p-2 font-mono font-medium">{it.item_code || "—"}</td>
-                      <td className="p-2 font-mono text-muted-foreground">{it.batch_number || "—"}</td>
+                      <td className="p-2 font-mono text-muted-foreground">
+                        {it.batch_number || "—"}
+                      </td>
                       <td className="p-2 font-medium">{it.name}</td>
                       <td className="p-2">{it.supplier || "—"}</td>
                       <td className="p-2 font-semibold">
@@ -171,7 +175,9 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
 
             <div className="mt-6 text-center text-[11px] text-muted-foreground">
               <p>Vienna High Quality Chocolate — Internal Quality Management System</p>
-              <p className="font-serif italic text-cocoa/70">Certified for Food Safety & Quality Standards</p>
+              <p className="font-serif italic text-cocoa/70">
+                Certified for Food Safety & Quality Standards
+              </p>
             </div>
           </div>
         </div>

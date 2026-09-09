@@ -126,7 +126,6 @@
   --sidebar-ring: oklch(0.575 0.135 48);
 }
 
-
 .dark {
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
@@ -217,5 +216,3 @@
   position: relative;
   touch-action: pan-x pan-y pinch-zoom;
 }
-
-

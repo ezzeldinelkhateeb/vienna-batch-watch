@@ -156,10 +156,7 @@ export async function runExpiryCheckEngine() {
 
     if (status === "normal") {
       if (item.last_notified_status !== null) {
-        await supabaseAdmin
-          .from("items")
-          .update({ last_notified_status: null })
-          .eq("id", item.id);
+        await supabaseAdmin.from("items").update({ last_notified_status: null }).eq("id", item.id);
         reset += 1;
       }
       continue;
@@ -239,10 +236,7 @@ export async function runExpiryCheckEngine() {
     }
 
     // Update item notified status
-    await supabaseAdmin
-      .from("items")
-      .update({ last_notified_status: status })
-      .eq("id", item.id);
+    await supabaseAdmin.from("items").update({ last_notified_status: status }).eq("id", item.id);
   }
 
   return {
@@ -256,16 +250,14 @@ export async function runExpiryCheckEngine() {
 }
 
 /** Server function to trigger the expiry check manually from the UI. */
-export const triggerExpiryCheckNow = createServerFn({ method: "POST" }).handler(
-  async () => {
-    try {
-      const summary = await runExpiryCheckEngine();
-      return { success: true as const, ...summary };
-    } catch (err) {
-      return {
-        success: false as const,
-        error: err instanceof Error ? err.message : "خطأ غير معروف أثناء فحص الصلاحية",
-      };
-    }
-  },
-);
+export const triggerExpiryCheckNow = createServerFn({ method: "POST" }).handler(async () => {
+  try {
+    const summary = await runExpiryCheckEngine();
+    return { success: true as const, ...summary };
+  } catch (err) {
+    return {
+      success: false as const,
+      error: err instanceof Error ? err.message : "خطأ غير معروف أثناء فحص الصلاحية",
+    };
+  }
+});
