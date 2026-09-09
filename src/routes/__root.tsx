@@ -41,6 +41,19 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    const msg = error?.message?.toLowerCase() || "";
+    if (
+      msg.includes("auth") ||
+      msg.includes("jwt") ||
+      msg.includes("token") ||
+      msg.includes("session") ||
+      msg.includes("email logins are disabled") ||
+      msg.includes("email_provider_disabled")
+    ) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/auth";
+      }
+    }
   }, [error]);
 
   return (
@@ -63,10 +76,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             Try again
           </button>
           <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            href="/auth"
+            className="inline-flex items-center justify-center rounded-md border border-input bg-card px-4 py-2 text-sm font-medium text-cocoa transition-colors hover:bg-accent"
           >
-            Go home
+            تسجيل الدخول / Login
           </a>
         </div>
       </div>
