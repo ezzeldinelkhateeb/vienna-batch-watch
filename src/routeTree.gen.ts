@@ -16,6 +16,7 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as ApiPublicHooksExpiryCheckRouteImport } from './routes/api/public/hooks/expiry-check'
+import { Route as ApiPublicHooksTelegramWebhookRouteImport } from './routes/api/public/hooks/telegram-webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,6 +54,12 @@ const ApiPublicHooksExpiryCheckRoute =
     path: '/api/public/hooks/expiry-check',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksTelegramWebhookRoute =
+  ApiPublicHooksTelegramWebhookRouteImport.update({
+    id: '/api/public/hooks/telegram-webhook',
+    path: '/api/public/hooks/telegram-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +68,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -69,6 +77,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -79,6 +88,7 @@ export interface FileRoutesById {
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
+  '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -89,6 +99,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/settings'
     | '/api/public/hooks/expiry-check'
+    | '/api/public/hooks/telegram-webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -97,6 +108,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/settings'
     | '/api/public/hooks/expiry-check'
+    | '/api/public/hooks/telegram-webhook'
   id:
     | '__root__'
     | '/'
@@ -106,6 +118,7 @@ export interface FileRouteTypes {
     | '/_authenticated/notifications'
     | '/_authenticated/settings'
     | '/api/public/hooks/expiry-check'
+    | '/api/public/hooks/telegram-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -113,6 +126,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicHooksExpiryCheckRoute: typeof ApiPublicHooksExpiryCheckRoute
+  ApiPublicHooksTelegramWebhookRoute: typeof ApiPublicHooksTelegramWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -166,6 +180,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksExpiryCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/telegram-webhook': {
+      id: '/api/public/hooks/telegram-webhook'
+      path: '/api/public/hooks/telegram-webhook'
+      fullPath: '/api/public/hooks/telegram-webhook'
+      preLoaderRoute: typeof ApiPublicHooksTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -189,6 +210,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicHooksExpiryCheckRoute: ApiPublicHooksExpiryCheckRoute,
+  ApiPublicHooksTelegramWebhookRoute: ApiPublicHooksTelegramWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -13,6 +13,7 @@ import {
   Clock,
   Settings as SettingsIcon,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +24,7 @@ import {
   sendTestWhatsApp,
   sendTestTelegram,
   triggerExpiryCheckNow,
+  registerTelegramBotWebhook,
 } from "@/lib/whatsapp.functions";
 import { buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { AppHeader } from "@/components/AppHeader";
@@ -68,6 +70,7 @@ function SettingsPage() {
   const sendWaTest = useServerFn(sendTestWhatsApp);
   const sendTgTest = useServerFn(sendTestTelegram);
   const runCheckNow = useServerFn(triggerExpiryCheckNow);
+  const registerWebhook = useServerFn(registerTelegramBotWebhook);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("alerts");
 
@@ -89,6 +92,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testingWa, setTestingWa] = useState(false);
   const [testingTg, setTestingTg] = useState(false);
+  const [activatingWebhook, setActivatingWebhook] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [callmebotDiagnostic, setCallmebotDiagnostic] = useState<string | null>(null);
 
@@ -256,6 +260,29 @@ function SettingsPage() {
       toast.error(msg, { duration: 8000 });
     } finally {
       setTriggering(false);
+    }
+  };
+
+  const handleActivateWebhook = async () => {
+    if (!tgToken.trim()) {
+      toast.error("يرجى إدخال وحفظ رمز البوت (Bot Token) أولاً لتفعيل الرد الذكي.");
+      return;
+    }
+    setActivatingWebhook(true);
+    try {
+      const res = await registerWebhook({ data: { botToken: tgToken } });
+      if (res.success) {
+        toast.success(
+          "تم تفعيل الرد التلقائي الذكي للبوت بنجاح! 🎉 يمكنك الآن مراسلة البوت وسؤاله في الخاص أو في الجروب وسيجيبك فوراً.",
+          { duration: 8000 },
+        );
+      } else {
+        toast.error(res.error || "فشل تفعيل الـ Webhook مع سيرفر تليجرام.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "حدث خطأ أثناء تفعيل الرد الذكي.");
+    } finally {
+      setActivatingWebhook(false);
     }
   };
 
@@ -465,7 +492,7 @@ function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button
                     type="button"
                     variant="outline"
@@ -476,31 +503,61 @@ function SettingsPage() {
                     <Send className="size-3.5 text-[#229ED9]" />
                     {testingTg ? t("sending") : t("sendTestTelegram")}
                   </Button>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleActivateWebhook}
+                    disabled={activatingWebhook || !tgToken.trim()}
+                    className="gap-2 text-xs border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 font-bold"
+                  >
+                    <Sparkles className="size-3.5 text-blue-600" />
+                    <span>{activatingWebhook ? "جارٍ التفعيل..." : "⚡ تفعيل الرد الذكي للبوت (Webhook)"}</span>
+                  </Button>
                 </div>
 
-                <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-                  <p className="font-semibold text-cocoa">
-                    {lang === "ar"
-                      ? "كيفية إعداد بوت تليجرام في دقيقة واحدة:"
-                      : "How to set up Telegram Bot in 1 minute:"}
+                {/* Group and Commands Guide */}
+                <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-xs space-y-2.5">
+                  <p className="font-bold text-cocoa flex items-center gap-2 text-sm">
+                    <Users className="size-4 text-blue-600" />
+                    <span>👥 إرسال التنبيهات لجروب الجودة (كل الفريق دفعة واحدة):</span>
                   </p>
-                  <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-muted-foreground leading-relaxed">
+                    <li>أضف البوت إلى جروب تليجرام الخاص بفريق الجودة أو إدارة الإنتاج.</li>
                     <li>
-                      {lang === "ar"
-                        ? "تحدث مع @BotFather على تليجرام واكتب /newbot لإنشاء بوتك والحصول على الـ Token."
-                        : "Message @BotFather on Telegram, send /newbot to create your bot and copy the Token."}
+                      اجعل البوت <strong>مشرفاً (Admin)</strong> في الجروب مع صلاحية إرسال الرسائل.
                     </li>
                     <li>
-                      {lang === "ar"
-                        ? "أرسل أي رسالة للبوت الجديد، ثم افتح @userinfobot لمعرفة الـ Chat ID الخاص بك أو أضف البوت لمجموعة وانسخ ID المجموعة."
-                        : "Message your new bot, then open @userinfobot to get your Chat ID, or add the bot to your team group."}
+                      لمعرفة <strong>معرّف الجروب (Chat ID)</strong>: أضف بوت <code>@userinfobot</code> أو <code>@RawDataBot</code> للجروب، وانسخ الـ ID (يبدأ دائماً برقم سالب مثل: <code>-1002345678901</code>).
                     </li>
                     <li>
-                      {lang === "ar"
-                        ? "الصق الـ Token والـ Chat ID هنا واضغط 'إرسال تجربة'."
-                        : "Paste the Token and Chat ID above and click 'Send Telegram Test'."}
+                      الصق معرّف الجروب في حقل <strong>Chat ID</strong> أعلاه واضغط <strong>حفظ</strong>. سيتم إرسال كافة التنبيهات للجروب كاملاً!
                     </li>
                   </ol>
+
+                  <div className="border-t border-blue-500/20 pt-2.5 space-y-1">
+                    <p className="font-bold text-cocoa text-xs flex items-center gap-1.5">
+                      <Sparkles className="size-3.5 text-blue-600" />
+                      <span>🧠 قدرات البوت الذكي (بعد الضغط على تفعيل الرد الذكي):</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      يمكنك أو لأي عضو في الجروب كتابة أي أمر للبوت وسيقوم بالرد الفوري من قاعدة البيانات:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono text-cocoa pt-1">
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-brand">/status</span> أو "تقرير" : ملخص شامل للمخزون
+                      </div>
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-red-600">/urgent</span> أو "طوارئ" : الخامات الحرجة فوراً
+                      </div>
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-amber-600">/qc</span> أو "حجر" : شحنات الحجر الصحي
+                      </div>
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-blue-600">/search &lt;اسم&gt;</span> : تفاصيل أي صنف أو تشغيلة
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

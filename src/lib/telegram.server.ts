@@ -59,3 +59,52 @@ export async function sendTelegram(
     };
   }
 }
+
+/**
+ * Registers the Telegram Webhook URL so the bot can receive messages and reply interactively.
+ */
+export async function setTelegramWebhook(
+  botToken: string,
+  webhookUrl: string,
+): Promise<{ ok: boolean; description?: string }> {
+  const cleanToken = botToken.trim();
+  const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/setWebhook?url=${encodeURIComponent(webhookUrl)}&allowed_updates=["message"]`;
+  try {
+    const res = await fetch(url);
+    return (await res.json()) as { ok: boolean; description?: string };
+  } catch (err) {
+    return { ok: false, description: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
+/**
+ * Retrieves the current webhook configuration status from Telegram.
+ */
+export async function getTelegramWebhookInfo(
+  botToken: string,
+): Promise<{ ok: boolean; result?: { url: string; pending_update_count?: number; last_error_message?: string } }> {
+  const cleanToken = botToken.trim();
+  const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/getWebhookInfo`;
+  try {
+    const res = await fetch(url);
+    return await res.json();
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Removes the Telegram Webhook so the bot can revert to manual polling if needed.
+ */
+export async function deleteTelegramWebhook(
+  botToken: string,
+): Promise<{ ok: boolean; description?: string }> {
+  const cleanToken = botToken.trim();
+  const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/deleteWebhook`;
+  try {
+    const res = await fetch(url);
+    return await res.json();
+  } catch (err) {
+    return { ok: false, description: err instanceof Error ? err.message : "Network error" };
+  }
+}

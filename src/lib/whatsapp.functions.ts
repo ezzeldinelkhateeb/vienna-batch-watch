@@ -285,3 +285,42 @@ export const triggerExpiryCheckNow = createServerFn({ method: "POST" }).handler(
     };
   }
 });
+
+/** Server function to register the Telegram Webhook so the bot becomes interactive. */
+export const registerTelegramBotWebhook = createServerFn({ method: "POST" })
+  .validator((data?: { botToken?: string }) => data)
+  .handler(async ({ data }) => {
+    let token = data?.botToken?.trim();
+    if (!token) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: settings } = await supabaseAdmin
+          .from("app_settings")
+          .select("telegram_bot_token")
+          .maybeSingle();
+        token = settings?.telegram_bot_token || undefined;
+      } catch (err) {
+        console.warn("[registerTelegramBotWebhook] Could not load token:", err);
+      }
+    }
+
+    if (!token) {
+      return { success: false as const, error: "رمز البوت (Bot Token) مطلوب لتفعيل الرد الذكي." };
+    }
+
+    const { setTelegramWebhook } = await import("./telegram.server");
+    const webhookUrl = "https://vienna-batch-watch.vercel.app/api/public/hooks/telegram-webhook";
+    const res = await setTelegramWebhook(token, webhookUrl);
+
+    if (!res.ok) {
+      return {
+        success: false as const,
+        error: res.description || "فشل تسجيل الـ Webhook مع سيرفر تليجرام.",
+      };
+    }
+
+    return {
+      success: true as const,
+      url: webhookUrl,
+    };
+  });

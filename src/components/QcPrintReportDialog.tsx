@@ -1,11 +1,13 @@
-import { useMemo } from "react";
-import { Printer } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Printer, MessageCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { type ItemRow } from "@/components/ItemFormDialog";
 import { type Status, daysUntil, statusFor, type Thresholds } from "@/lib/status";
 import { countdownText } from "@/lib/format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
+import { useSettings } from "@/hooks/use-settings";
 
 interface Props {
   open: boolean;
@@ -16,6 +18,8 @@ interface Props {
 
 export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: Props) {
   const { t, lang } = useI18n();
+  const settings = useSettings();
+  const [shareWhatsApp, setShareWhatsApp] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -60,20 +64,47 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
     return map;
   }, [items]);
 
+  const qcReportMessage = useMemo(() => {
+    return [
+      "🍫 *تقرير فحص واعتماد الجودة — مصنع فينا* 🍫",
+      "*إدارة توكيد ومراقبة الجودة (QA/QC Department)*",
+      `📅 *تاريخ التقرير:* ${todayStr}`,
+      "━━━━━━━━━━━━━━━━━━━━",
+      `📦 *إجمالي التشغيلات المفحوصة:* ${items.length}`,
+      `• ✅ معتمد ومقبول: ${approvedCount}`,
+      `• 🔒 تحت الحجر (بانتظار الفحص): ${quarantineCount}`,
+      `• ❌ مرفوض: ${rejectedCount}`,
+      `• 🚨 شحنات حرجة الصلاحية: ${criticalCount}`,
+      "━━━━━━━━━━━━━━━━━━━━",
+      "⚠️ *توجيه فني:* الالتزام الصارم بقاعدة الصرف بالأقدمية (FEFO).",
+      "_نظام Vienna Batch Watch الذكي_",
+    ].join("\n");
+  }, [items.length, approvedCount, quarantineCount, rejectedCount, criticalCount, todayStr]);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-4 sm:p-8">
-        <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 print:hidden">
-          <DialogTitle className="text-lg font-semibold text-cocoa">
-            {t("qcReportTitle")}
-          </DialogTitle>
-          <div className="flex gap-2">
-            <Button onClick={handlePrint} size="sm" className="gap-1.5">
-              <Printer className="size-4" />
-              {t("print")}
-            </Button>
-          </div>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-4 sm:p-8">
+          <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 print:hidden">
+            <DialogTitle className="text-lg font-semibold text-cocoa">
+              {t("qcReportTitle")}
+            </DialogTitle>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShareWhatsApp(true)}
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs text-[#25D366] border-[#25D366]/40 hover:bg-[#25D366]/10 font-bold"
+              >
+                <MessageCircle className="size-4" />
+                <span>مشاركة عبر واتساب</span>
+              </Button>
+              <Button onClick={handlePrint} size="sm" className="gap-1.5">
+                <Printer className="size-4" />
+                {t("print")}
+              </Button>
+            </div>
+          </DialogHeader>
 
         {/* Printable Paper Content */}
         <div className="print-content space-y-6 pt-2 text-foreground">
@@ -229,5 +260,14 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
         </div>
       </DialogContent>
     </Dialog>
-  );
+
+    <WhatsAppShareDialog
+      open={shareWhatsApp}
+      onOpenChange={setShareWhatsApp}
+      customText={qcReportMessage}
+      thresholds={thresholds}
+      defaultPhone={settings.data?.whatsapp_phone}
+    />
+  </>
+);
 }

@@ -42,6 +42,7 @@ import {
   type ProductImageDetails,
 } from "@/components/ProductImageViewerDialog";
 import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
+import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,7 @@ function InventoryPage() {
   const [editing, setEditing] = useState<ItemRow | null>(null);
   const [quickQcItem, setQuickQcItem] = useState<ItemRow | null>(null);
   const [activeImage, setActiveImage] = useState<ProductImageDetails | null>(null);
+  const [whatsAppItem, setWhatsAppItem] = useState<ItemRow | null>(null);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
     setViewMode(mode);
@@ -256,11 +258,8 @@ function InventoryPage() {
     URL.revokeObjectURL(url);
   };
 
-  const shareItemOnWhatsApp = (item: ItemRow, status: Status, days: number) => {
-    const text = buildAlertMessage(item, status, days);
-    const targetPhone = settings.data?.whatsapp_phone;
-    const url = buildDirectWhatsAppUrl(targetPhone, text);
-    window.open(url, "_blank");
+  const shareItemOnWhatsApp = (item: ItemRow) => {
+    setWhatsAppItem(item);
   };
 
   const hasUrgent = counts.expired > 0 || counts.critical > 0;
@@ -879,6 +878,14 @@ function InventoryPage() {
         onOpenChange={setPrintOpen}
         items={rows.map((r) => r.item)}
         thresholds={thresholds}
+      />
+
+      <WhatsAppShareDialog
+        open={Boolean(whatsAppItem)}
+        onOpenChange={(open) => !open && setWhatsAppItem(null)}
+        item={whatsAppItem}
+        thresholds={thresholds}
+        defaultPhone={settings.data?.whatsapp_phone}
       />
 
       <ItemFormDialog
