@@ -86,10 +86,9 @@ export function WhatsAppShareDialog({
   };
 
   const handleCopyImageToClipboard = async () => {
-    if (!item) return;
     setGenerating(true);
     try {
-      const blob = await generateItemReportCardBlob(item, thresholds);
+      const blob = await generateItemReportCardBlob(item, thresholds, item?.name || "تقرير جودة فيينا");
       if (!blob) throw new Error("تعذر إنشاء صورة التقرير");
 
       if (navigator.clipboard && typeof ClipboardItem !== "undefined") {
@@ -98,29 +97,28 @@ export function WhatsAppShareDialog({
         ]);
         setCopiedImage(true);
         toast.success("تم نسخ صورة التقرير! يمكنك الآن ضغط Ctrl+V للصقها في واتساب ✅", {
-          duration: 6000,
+          duration: 4000,
         });
-        setTimeout(() => setCopiedImage(false), 3000);
+        setTimeout(() => setCopiedImage(false), 2500);
       } else {
-        toast.info("المتصفح لا يدعم نسخ الصور مباشرة، يمكنك الضغط على 'تحميل الصورة'.");
+        toast.info("المتصفح لا يدعم نسخ الصور مباشرة، يمكنك الضغط على 'تحميل الصورة' أو 'مشاركة بالصورة'");
       }
     } catch (err: any) {
-      toast.error(err?.message || "فشل نسخ الصورة");
+      toast.error(err?.message || "تعذر نسخ الصورة");
     } finally {
       setGenerating(false);
     }
   };
 
   const handleDownloadImage = async () => {
-    if (!item) return;
     setGenerating(true);
     try {
-      const blob = await generateItemReportCardBlob(item, thresholds);
+      const blob = await generateItemReportCardBlob(item, thresholds, item?.name || "تقرير جودة فيينا");
       if (!blob) throw new Error("تعذر إنشاء صورة التقرير");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `qc-report-${item.item_code || item.name}-${item.expiry_date}.png`;
+      a.download = `qc-report-${item?.item_code || item?.name || "vienna"}-${new Date().toISOString().slice(0, 10)}.png`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("تم تحميل صورة التقرير بنجاح ✅");
@@ -132,17 +130,16 @@ export function WhatsAppShareDialog({
   };
 
   const handleNativeShareWithImage = async () => {
-    if (!item) return;
     setGenerating(true);
     try {
-      const blob = await generateItemReportCardBlob(item, thresholds);
+      const blob = await generateItemReportCardBlob(item, thresholds, item?.name || "تقرير جودة فيينا");
       if (!blob) throw new Error("تعذر إنشاء الصورة");
 
-      const file = new File([blob], `qc-${item.name}.png`, { type: "image/png" });
+      const file = new File([blob], `qc-${item?.name || "vienna-report"}.png`, { type: "image/png" });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: `تقرير جودة: ${item.name}`,
+          title: `تقرير جودة: ${item?.name || "Vienna QC"}`,
           text: messageText,
           files: [file],
         });
@@ -152,7 +149,7 @@ export function WhatsAppShareDialog({
         // Fallback to text share or direct URL
         if (navigator.share) {
           await navigator.share({
-            title: `تقرير جودة: ${item.name}`,
+            title: `تقرير جودة: ${item?.name || "Vienna QC"}`,
             text: messageText,
           });
           onOpenChange(false);
@@ -161,7 +158,7 @@ export function WhatsAppShareDialog({
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") {
+      if (err?.name !== "AbortError") {
         handleOpenWhatsApp();
       }
     } finally {

@@ -30,6 +30,7 @@ import { buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { TeamManagement } from "@/components/TeamManagement";
+import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,6 +96,7 @@ function SettingsPage() {
   const [activatingWebhook, setActivatingWebhook] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [callmebotDiagnostic, setCallmebotDiagnostic] = useState<string | null>(null);
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -177,13 +179,7 @@ function SettingsPage() {
   };
 
   const openDirectWhatsApp = () => {
-    const testMsg =
-      "🍫 *Vienna Expiry Tracker* 🍫\n" +
-      "رسالة تجريبية لتأكيد عمل الإرسال المباشر عبر واتساب بنجاح ✅\n" +
-      "تاريخ الإرسال: " +
-      new Date().toLocaleString(lang === "ar" ? "ar-EG" : "en-US");
-    const url = buildDirectWhatsAppUrl(phone, testMsg);
-    window.open(url, "_blank");
+    setWhatsAppDialogOpen(true);
   };
 
   const testTelegramBot = async () => {
@@ -669,6 +665,18 @@ function SettingsPage() {
 
         {/* Tab 3: Team Management */}
         {activeTab === "team" && isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
+
+        <WhatsAppShareDialog
+          open={whatsAppDialogOpen}
+          onOpenChange={setWhatsAppDialogOpen}
+          defaultPhone={phone}
+          customText={
+            "🍫 *Vienna Expiry Tracker* 🍫\n" +
+            "رسالة تجريبية لتأكيد عمل الإرسال والمشاركة عبر واتساب بنجاح ✅\n" +
+            "تاريخ الإرسال: " +
+            new Date().toLocaleString(lang === "ar" ? "ar-EG" : "en-US")
+          }
+        />
       </main>
 
       <MobileBottomNav />

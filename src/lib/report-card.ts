@@ -7,8 +7,9 @@ import type { ItemRow } from "@/components/ItemFormDialog";
  * Works entirely in browser without any external backend dependencies.
  */
 export async function generateItemReportCardBlob(
-  item: ItemRow,
+  item?: ItemRow | null,
   thresholds?: Thresholds,
+  customTitle?: string,
 ): Promise<Blob | null> {
   if (typeof document === "undefined") return null;
 
@@ -18,8 +19,8 @@ export async function generateItemReportCardBlob(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  const days = daysUntil(item.expiry_date);
-  const status = statusFor(days, thresholds);
+  const days = item ? daysUntil(item.expiry_date) : 365;
+  const status = item ? statusFor(days, thresholds) : "normal";
 
   // Background gradient
   const bgGrad = ctx.createLinearGradient(0, 0, 900, 560);
@@ -72,11 +73,12 @@ export async function generateItemReportCardBlob(
   ctx.textAlign = "center";
   ctx.fillText(st.label, 170, 70);
 
-  // Material Name (Prominent)
+  // Material / System Name (Prominent)
   ctx.textAlign = "right";
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 36px 'Segoe UI', Tahoma, sans-serif";
-  ctx.fillText(item.name, 850, 165);
+  const mainTitle = item ? item.name : (customTitle || "نظام مراقبة الصلاحية وجودة التشغيلات");
+  ctx.fillText(mainTitle, 850, 165);
 
   // Divider
   ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
@@ -108,19 +110,33 @@ export async function generateItemReportCardBlob(
     ctx.fillText(value, 200, y);
   };
 
-  drawRow("كود الصنف:", item.item_code || "غير مسجل", 235);
-  drawRowLeft("رقم التشغيلة (Batch):", item.batch_number || "—", 235);
+  if (item) {
+    drawRow("كود الصنف:", item.item_code || "غير مسجل", 235);
+    drawRowLeft("رقم التشغيلة (Batch):", item.batch_number || "—", 235);
 
-  drawRow("الكمية في المخزن:", `${item.quantity ?? "—"} ${item.unit ?? ""}`.trim(), 285);
-  drawRowLeft("المورد:", item.supplier || "—", 285);
+    drawRow("الكمية في المخزن:", `${item.quantity ?? "—"} ${item.unit ?? ""}`.trim(), 285);
+    drawRowLeft("المورد:", item.supplier || "—", 285);
 
-  drawRow("تاريخ الانتهاء:", item.expiry_date, 335);
-  const countdownStr = days < 0 ? `منتهي منذ ${Math.abs(days)} يوم` : days === 0 ? "ينتهي اليوم!" : `متبقٍ: ${days} يوم`;
-  drawRowLeft("الوضع الزمني:", countdownStr, 335);
+    drawRow("تاريخ الانتهاء:", item.expiry_date, 335);
+    const countdownStr = days < 0 ? `منتهي منذ ${Math.abs(days)} يوم` : days === 0 ? "ينتهي اليوم!" : `متبقٍ: ${days} يوم`;
+    drawRowLeft("الوضع الزمني:", countdownStr, 335);
 
-  drawRow("موقع التخزين:", item.storage_location || "غير محدد", 385);
-  const qcLabel = item.qc_status === "approved" ? "✅ معتمد (Approved)" : item.qc_status === "rejected" ? "❌ مرفوض (Rejected)" : "🔒 تحت الحجر (Quarantine)";
-  drawRowLeft("حالة الجودة (QC):", qcLabel, 385);
+    drawRow("موقع التخزين:", item.storage_location || "غير محدد", 385);
+    const qcLabel = item.qc_status === "approved" ? "✅ معتمد (Approved)" : item.qc_status === "rejected" ? "❌ مرفوض (Rejected)" : "🔒 تحت الحجر (Quarantine)";
+    drawRowLeft("حالة الجودة (QC):", qcLabel, 385);
+  } else {
+    drawRow("نظام التنبيهات:", "مراقبة الصلاحية التلقائية", 235);
+    drawRowLeft("قنوات الإرسال:", "واتساب وتليجرام", 235);
+
+    drawRow("حالة الربط:", "متصل وجاهز للعمل ✅", 285);
+    drawRowLeft("المصنع:", "Vienna Confectionery", 285);
+
+    drawRow("تاريخ اليوم:", new Date().toISOString().slice(0, 10), 335);
+    drawRowLeft("الحالة العامة:", "فحص نشط 24/7", 335);
+
+    drawRow("بروتوكول الصرف:", "FEFO (الأقرب انتهاءً أولاً)", 385);
+    drawRowLeft("توكيد الجودة:", "معتمد من إدارة QA/QC", 385);
+  }
 
   // Footer box
   ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
