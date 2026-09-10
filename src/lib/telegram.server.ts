@@ -81,6 +81,54 @@ export async function sendTelegram(
 }
 
 /**
+ * Sends a photo via the official Telegram Bot API with caption and inline keyboard.
+ */
+export async function sendTelegramPhoto(
+  botToken: string,
+  chatId: string,
+  photoUrl: string,
+  caption?: string,
+  options?: TelegramSendOptions,
+): Promise<TelegramResult> {
+  const cleanToken = botToken.trim();
+  const cleanChat = chatId.trim();
+
+  if (!cleanToken || !cleanChat || !photoUrl) {
+    return { success: false, error: "بيانات إرسال الصورة غير مكتملة." };
+  }
+
+  const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/sendPhoto`;
+
+  try {
+    const payload: Record<string, any> = {
+      chat_id: cleanChat,
+      photo: photoUrl,
+      caption: caption || undefined,
+      parse_mode: options?.parse_mode || "Markdown",
+    };
+
+    if (options?.reply_markup) {
+      payload.reply_markup = options.reply_markup;
+    }
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = (await res.json()) as { ok: boolean; description?: string };
+    if (!res.ok || !data.ok) {
+      return { success: false, error: data.description ?? `HTTP ${res.status}` };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "خطأ في إرسال صورة تليجرام." };
+  }
+}
+
+/**
  * Answer an interactive Telegram callback query (when inline button clicked)
  */
 export async function answerTelegramCallback(
