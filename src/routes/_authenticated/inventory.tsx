@@ -20,6 +20,7 @@ import {
   MessageCircle,
   ShieldCheck,
   Sparkles,
+  Archive,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ import { ItemFormDialog, type ItemRow } from "@/components/ItemFormDialog";
 import { QuickQcModal } from "@/components/QuickQcModal";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
+import { BackupRestoreDialog } from "@/components/BackupRestoreDialog";
 import {
   ProductImageViewerDialog,
   type ProductImageDetails,
@@ -99,6 +101,7 @@ function InventoryPage() {
   const [quickQcItem, setQuickQcItem] = useState<ItemRow | null>(null);
   const [activeImage, setActiveImage] = useState<ProductImageDetails | null>(null);
   const [whatsAppItem, setWhatsAppItem] = useState<ItemRow | null>(null);
+  const [backupOpen, setBackupOpen] = useState(false);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
     setViewMode(mode);
@@ -528,6 +531,11 @@ function InventoryPage() {
               <span className="hidden sm:inline">{t("exportCsv")}</span>
             </Button>
 
+            <Button variant="outline" onClick={() => setBackupOpen(true)}>
+              <Archive className="size-4" />
+              <span className="hidden sm:inline">{t("backupRestoreModalBtn")}</span>
+            </Button>
+
             <Button
               onClick={() => {
                 setEditing(null);
@@ -665,7 +673,7 @@ function InventoryPage() {
                         variant="ghost"
                         className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
                         title={t("shareViaWhatsApp")}
-                        onClick={() => shareItemOnWhatsApp(item, status, days)}
+                        onClick={() => shareItemOnWhatsApp(item)}
                       >
                         <MessageCircle className="size-3.5" />
                         <span className="hidden sm:inline">{t("shareViaWhatsApp")}</span>
@@ -827,7 +835,7 @@ function InventoryPage() {
                             aria-label={t("shareViaWhatsApp")}
                             title={t("shareViaWhatsApp")}
                             className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                            onClick={() => shareItemOnWhatsApp(item, status, days)}
+                            onClick={() => shareItemOnWhatsApp(item)}
                           >
                             <MessageCircle className="size-4" />
                           </Button>
@@ -878,6 +886,11 @@ function InventoryPage() {
         onOpenChange={setPrintOpen}
         items={rows.map((r) => r.item)}
         thresholds={thresholds}
+      />
+
+      <BackupRestoreDialog
+        open={backupOpen}
+        onOpenChange={setBackupOpen}
       />
 
       <WhatsAppShareDialog

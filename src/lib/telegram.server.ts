@@ -3,14 +3,21 @@ export interface TelegramResult {
   error?: string;
 }
 
+export interface TelegramSendOptions {
+  parse_mode?: "Markdown" | "HTML" | undefined;
+  reply_markup?: any | undefined;
+  disable_web_page_preview?: boolean | undefined;
+}
+
 /**
  * Sends a message via the official Telegram Bot API.
- * Free, official, zero-downtime, and supports direct group/channel alerts.
+ * Free, official, zero-downtime, and supports direct group/channel alerts with rich keyboards.
  */
 export async function sendTelegram(
   botToken: string,
   chatId: string,
   text: string,
+  options?: TelegramSendOptions,
 ): Promise<TelegramResult> {
   const cleanToken = botToken.trim();
   const cleanChat = chatId.trim();
@@ -22,14 +29,27 @@ export async function sendTelegram(
   const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/sendMessage`;
 
   try {
+    const payload: Record<string, any> = {
+      chat_id: cleanChat,
+      text,
+      disable_web_page_preview: options?.disable_web_page_preview ?? true,
+    };
+
+    if (options?.parse_mode) {
+      payload.parse_mode = options.parse_mode;
+    } else {
+      // Default to Markdown for bold/italic formatting
+      payload.parse_mode = "Markdown";
+    }
+
+    if (options?.reply_markup) {
+      payload.reply_markup = options.reply_markup;
+    }
+
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: cleanChat,
-        text,
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = (await res.json()) as { ok: boolean; description?: string };
@@ -57,6 +77,32 @@ export async function sendTelegram(
       success: false,
       error: error instanceof Error ? error.message : "خطأ في الاتصال بسيرفر تليجرام.",
     };
+  }
+}
+
+/**
+ * Answer an interactive Telegram callback query (when inline button clicked)
+ */
+export async function answerTelegramCallback(
+  botToken: string,
+  callbackQueryId: string,
+  text?: string,
+): Promise<TelegramResult> {
+  const cleanToken = botToken.trim();
+  const url = `https://api.telegram.org/bot${encodeURIComponent(cleanToken)}/answerCallbackQuery`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text: text || undefined,
+      }),
+    });
+    const data = (await res.json()) as { ok: boolean; description?: string };
+    return { success: data.ok, error: data.description };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
   }
 }
 

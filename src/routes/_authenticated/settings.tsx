@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   CheckCircle2,
   Sparkles,
+  Archive,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { TeamManagement } from "@/components/TeamManagement";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
+import { BackupRestoreManager } from "@/components/BackupRestoreManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,7 +62,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-type SettingsTab = "alerts" | "thresholds" | "team";
+type SettingsTab = "alerts" | "thresholds" | "team" | "backup";
 
 function SettingsPage() {
   const { t, lang } = useI18n();
@@ -344,6 +346,19 @@ function SettingsPage() {
               <span>{t("tabSettingsTeam")}</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("backup")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+              activeTab === "backup"
+                ? "bg-card text-cocoa font-semibold shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Archive className="size-4 text-brand" />
+            <span>{t("tabSettingsBackup")}</span>
+          </button>
         </div>
 
         {/* Tab 1: Alert Channels & Manual Check */}
@@ -665,6 +680,9 @@ function SettingsPage() {
 
         {/* Tab 3: Team Management */}
         {activeTab === "team" && isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
+
+        {/* Tab 4: Smart Backup & Restore */}
+        {activeTab === "backup" && <BackupRestoreManager />}
 
         <WhatsAppShareDialog
           open={whatsAppDialogOpen}

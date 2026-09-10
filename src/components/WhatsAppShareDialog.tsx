@@ -58,7 +58,21 @@ export function WhatsAppShareDialog({
   const messageText = useMemo(() => {
     if (customText) return customText;
     if (!item) return "";
-    return buildAlertMessage(item, status, days);
+    return buildAlertMessage(
+      {
+        name: item.name,
+        expiry_date: item.expiry_date,
+        item_code: item.item_code ?? null,
+        batch_number: item.batch_number ?? null,
+        supplier: item.supplier ?? null,
+        quantity: item.quantity ?? null,
+        unit: item.unit ?? null,
+        storage_location: item.storage_location ?? null,
+        qc_status: item.qc_status ?? null,
+      },
+      status,
+      days,
+    );
   }, [customText, item, status, days]);
 
   // Determine target phone according to mode
@@ -233,8 +247,8 @@ export function WhatsAppShareDialog({
 
             {recipientMode === "custom" && (
               <div className="space-y-1.5 pt-1">
-                <Label htmlFor="customPhoneInput" className="text-xs">
-                  رقم المستلم (بالصيغة الدولية):
+                <Label htmlFor="customPhoneInput" className="text-xs font-medium">
+                  رقم المستلم (بالصيغة الدولية مثال: +201012345678):
                 </Label>
                 <Input
                   id="customPhoneInput"
@@ -244,6 +258,15 @@ export function WhatsAppShareDialog({
                   onChange={(e) => setCustomPhone(e.target.value)}
                   className="text-xs"
                 />
+              </div>
+            )}
+
+            {recipientMode === "open" && (
+              <div className="p-2.5 rounded-lg bg-[#25D366]/10 border border-[#25D366]/20 text-xs text-cocoa flex items-start gap-2">
+                <Users className="size-4 text-[#25D366] shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  <strong>اختيار جهة الاتصال:</strong> عند الضغط على زر الإرسال، سيفتح واتساب مباشرة ويعرض عليك قائمة محادثاتك وجهات الاتصال لتختار منها أي شخص أو جروب تود إرسال التقرير إليه.
+                </p>
               </div>
             )}
           </div>
@@ -312,7 +335,7 @@ export function WhatsAppShareDialog({
               <Button
                 type="button"
                 variant="ghost"
-                size="xs"
+                size="sm"
                 onClick={handleCopyText}
                 className="h-6 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
               >
