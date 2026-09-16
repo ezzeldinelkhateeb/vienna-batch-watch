@@ -3,6 +3,7 @@ import { Check, ShieldCheck, AlertTriangle, XCircle, Clock, Sparkles, Building2,
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { type ItemRow, type QcStatus } from "@/components/ItemFormDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const STORAGE_PRESETS = [
 ];
 
 export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
+  useRegisterBackModal(open, () => onOpenChange(false), "quick-qc-modal");
   const { t, lang } = useI18n();
   const [qcStatus, setQcStatus] = useState<QcStatus>("quarantine");
   const [storageLocation, setStorageLocation] = useState("");

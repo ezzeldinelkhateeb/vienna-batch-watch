@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Package, Bell, Settings, Plus, QrCode } from "lucide-react";
+import { Package, Bell, Settings, Plus, QrCode, ClipboardCheck } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface MobileBottomNavProps {
@@ -8,11 +8,12 @@ interface MobileBottomNavProps {
 }
 
 export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const location = useLocation();
   const pathname = location.pathname;
 
   const isInventory = pathname === "/" || pathname === "/inventory";
+  const isAudit = pathname === "/monthly-audit";
   const isNotifications = pathname === "/notifications";
   const isSettings = pathname === "/settings";
 
@@ -22,7 +23,7 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
         {/* Inventory Tab */}
         <Link
           to="/"
-          className={`flex flex-col items-center justify-center gap-1 px-3 py-1 transition-colors ${
+          className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
             isInventory ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -34,6 +35,23 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
             <Package className="size-4" />
           </div>
           <span className="text-[10px] leading-none">{t("mobileNavHome")}</span>
+        </Link>
+
+        {/* Monthly Audit Tab */}
+        <Link
+          to="/monthly-audit"
+          className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
+            isAudit ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <div
+            className={`flex size-8 items-center justify-center rounded-full transition-all ${
+              isAudit ? "bg-brand/15 text-brand scale-110" : ""
+            }`}
+          >
+            <ClipboardCheck className="size-4" />
+          </div>
+          <span className="text-[10px] leading-none">{lang === "ar" ? "الجرد" : "Audit"}</span>
         </Link>
 
         {/* Scan Barcode Button */}

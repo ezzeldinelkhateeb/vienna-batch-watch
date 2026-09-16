@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, Fragment } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,6 +21,11 @@ import {
   ShieldCheck,
   Sparkles,
   Archive,
+  ArrowUpDown,
+  RotateCcw,
+  Boxes,
+  MapPin,
+  X,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -39,6 +44,7 @@ import { QuickQcModal } from "@/components/QuickQcModal";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
 import { BackupRestoreDialog } from "@/components/BackupRestoreDialog";
+import { InventoryKpiOverview } from "@/components/InventoryKpiOverview";
 import {
   ProductImageViewerDialog,
   type ProductImageDetails,
@@ -55,6 +61,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+export type SortMode =
+  | "alpha"
+  | "grouped_materials"
+  | "fefo"
+  | "quantity_desc"
+  | "quantity_asc"
+  | "multi_batch";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({
@@ -77,7 +91,7 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function InventoryPage() {
   const { t, lang } = useI18n();
-  const { isAdmin } = useAuth();
+  const { isAdmin, canEditItems, canDeleteItems } = useAuth();
   const queryClient = useQueryClient();
   const settings = useSettings();
   const thresholds = settings.data?.thresholds;
@@ -86,6 +100,16 @@ function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
   const [fefoOnly, setFefoOnly] = useState(false);
+  const [multiBatchOnly, setMultiBatchOnly] = useState(false);
+  const [storageFilter, setStorageFilter] = useState<string>("all");
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("vienna_sort_mode") as SortMode | null;
+      if (saved) return saved;
+    }
+    return "alpha";
+  });
+
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("vienna_view_mode");
@@ -107,6 +131,13 @@ function InventoryPage() {
     setViewMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("vienna_view_mode", mode);
+    }
+  };
+
+  const handleSetSortMode = (mode: SortMode) => {
+    setSortMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vienna_sort_mode", mode);
     }
   };
 
@@ -164,6 +195,29 @@ function InventoryPage() {
     return map;
   }, [items.data]);
 
+  // Groups of materials by name
+  const materialGroupsMap = useMemo(() => {
+    const map = new Map<string, ItemRow[]>();
+    for (const item of items.data ?? []) {
+      const key = item.name.trim().toLowerCase();
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [items.data]);
+
+  // Storage locations list
+  const storageLocations = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of items.data ?? []) {
+      if (item.storage_location?.trim()) {
+        set.add(item.storage_location.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ar"));
+  }, [items.data]);
+
   const qcCounts = useMemo(() => {
     let quarantine = 0;
     let approved = 0;
@@ -180,26 +234,151 @@ function InventoryPage() {
     return { quarantine, approved, rejected, fefo };
   }, [items.data, fefoPriorityMap]);
 
+  // Comprehensive KPIs for stock & inventory
+  const kpis = useMemo(() => {
+    const all = items.data ?? [];
+    const totalBatches = all.length;
+    const uniqueMaterials = new Set(all.map((i) => i.name.trim().toLowerCase())).size;
+
+    let multiBatchCount = 0;
+    for (const [, list] of materialGroupsMap) {
+      if (list.length > 1) multiBatchCount++;
+    }
+
+    const unitSums = new Map<string, number>();
+    let criticalExpired = 0;
+    let approvedReady = 0;
+    let quarantineCount = 0;
+
+    for (const it of all) {
+      if (it.quantity != null && !isNaN(it.quantity)) {
+        const u = it.unit?.trim() || (lang === "ar" ? "وحدة" : "unit");
+        unitSums.set(u, (unitSums.get(u) ?? 0) + it.quantity);
+      }
+      const days = daysUntil(it.expiry_date);
+      const st = statusFor(days, thresholds);
+      if (st === "critical" || st === "expired") criticalExpired++;
+      if (it.qc_status === "approved") approvedReady++;
+      if ((it.qc_status ?? "quarantine") === "quarantine") quarantineCount++;
+    }
+
+    const totalStockDisplay =
+      Array.from(unitSums.entries())
+        .slice(0, 2)
+        .map(([u, q]) => `${q.toLocaleString()} ${u}`)
+        .join(" • ") || "—";
+
+    return {
+      totalBatches,
+      uniqueMaterials,
+      multiBatchCount,
+      totalStockDisplay,
+      criticalExpired,
+      approvedReady,
+      quarantineCount,
+    };
+  }, [items.data, materialGroupsMap, thresholds, lang]);
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    statusFilter !== "all" ||
+    qcFilter !== "all" ||
+    fefoOnly ||
+    multiBatchOnly ||
+    storageFilter !== "all";
+
+  const resetAllFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setQcFilter("all");
+    setFefoOnly(false);
+    setMultiBatchOnly(false);
+    setStorageFilter("all");
+  };
+
   const rows = useMemo(() => {
     const list = (items.data ?? []).map((item) => {
       const days = daysUntil(item.expiry_date);
       const isFefoFirst = !!fefoPriorityMap.get(item.id);
-      return { item, days, status: statusFor(days, thresholds), isFefoFirst };
+      const materialBatchCount = materialGroupsMap.get(item.name.trim().toLowerCase())?.length ?? 1;
+      return { item, days, status: statusFor(days, thresholds), isFefoFirst, materialBatchCount };
     });
+
     const q = search.trim().toLowerCase();
-    return list.filter(
-      (r) =>
-        (statusFilter === "all" || r.status === statusFilter) &&
-        (qcFilter === "all" || (r.item.qc_status ?? "quarantine") === qcFilter) &&
-        (!fefoOnly || r.isFefoFirst) &&
-        (q === "" ||
+
+    // 1. Filter
+    const filtered = list.filter((r) => {
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (qcFilter !== "all" && (r.item.qc_status ?? "quarantine") !== qcFilter) return false;
+      if (fefoOnly && !r.isFefoFirst) return false;
+      if (multiBatchOnly && r.materialBatchCount <= 1) return false;
+      if (storageFilter !== "all" && (r.item.storage_location ?? "").trim() !== storageFilter) return false;
+      if (q !== "") {
+        const match =
           (r.item.item_code ?? "").toLowerCase().includes(q) ||
           (r.item.batch_number ?? "").toLowerCase().includes(q) ||
           r.item.name.toLowerCase().includes(q) ||
           (r.item.supplier ?? "").toLowerCase().includes(q) ||
-          (r.item.storage_location ?? "").toLowerCase().includes(q)),
-    );
-  }, [items.data, search, statusFilter, qcFilter, fefoOnly, fefoPriorityMap, thresholds]);
+          (r.item.storage_location ?? "").toLowerCase().includes(q) ||
+          (r.item.notes ?? "").toLowerCase().includes(q) ||
+          (r.item.qc_notes ?? "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    // 2. Sort
+    filtered.sort((a, b) => {
+      if (sortMode === "alpha" || sortMode === "grouped_materials") {
+        const nameComp = a.item.name.localeCompare(b.item.name, "ar", {
+          sensitivity: "base",
+          numeric: true,
+        });
+        if (nameComp !== 0) return nameComp;
+        return new Date(a.item.expiry_date).getTime() - new Date(b.item.expiry_date).getTime();
+      }
+
+      if (sortMode === "fefo") {
+        return new Date(a.item.expiry_date).getTime() - new Date(b.item.expiry_date).getTime();
+      }
+
+      if (sortMode === "quantity_desc") {
+        return (b.item.quantity ?? 0) - (a.item.quantity ?? 0);
+      }
+
+      if (sortMode === "quantity_asc") {
+        return (a.item.quantity ?? 0) - (b.item.quantity ?? 0);
+      }
+
+      if (sortMode === "multi_batch") {
+        if (a.materialBatchCount !== b.materialBatchCount) {
+          return b.materialBatchCount - a.materialBatchCount;
+        }
+        const nameComp = a.item.name.localeCompare(b.item.name, "ar", {
+          sensitivity: "base",
+          numeric: true,
+        });
+        if (nameComp !== 0) return nameComp;
+        return new Date(a.item.expiry_date).getTime() - new Date(b.item.expiry_date).getTime();
+      }
+
+      return 0;
+    });
+
+    return filtered;
+  }, [
+    items.data,
+    search,
+    statusFilter,
+    qcFilter,
+    fefoOnly,
+    multiBatchOnly,
+    storageFilter,
+    sortMode,
+    fefoPriorityMap,
+    materialGroupsMap,
+    thresholds,
+  ]);
 
   const counts = useMemo(() => {
     const base: Record<Status, number> = {
@@ -306,15 +485,31 @@ function InventoryPage() {
           </div>
         )}
 
+        {/* Top Stock & Inventory KPI Overview */}
+        <InventoryKpiOverview
+          uniqueMaterials={kpis.uniqueMaterials}
+          totalBatches={kpis.totalBatches}
+          totalStockDisplay={kpis.totalStockDisplay}
+          criticalExpired={kpis.criticalExpired}
+          multiBatchCount={kpis.multiBatchCount}
+          approvedReady={kpis.approvedReady}
+          hasActiveFilters={hasActiveFilters}
+          isUrgentActive={statusFilter === "critical" || statusFilter === "expired"}
+          isMultiBatchActive={multiBatchOnly}
+          isApprovedActive={qcFilter === "approved"}
+          onFilterReset={resetAllFilters}
+          onFilterUrgent={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
+          onFilterMultiBatch={() => setMultiBatchOnly((prev) => !prev)}
+          onFilterApproved={() => setQcFilter(qcFilter === "approved" ? "all" : "approved")}
+        />
+
+        {/* Expiry Status Metric Cards */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={t("totalItems")}
             value={items.data?.length ?? 0}
-            active={statusFilter === "all" && qcFilter === "all"}
-            onClick={() => {
-              setStatusFilter("all");
-              setQcFilter("all");
-            }}
+            active={statusFilter === "all" && qcFilter === "all" && !multiBatchOnly && storageFilter === "all"}
+            onClick={resetAllFilters}
           />
           {STATUS_ORDER.map((s) => (
             <StatCard
@@ -334,12 +529,9 @@ function InventoryPage() {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             type="button"
-            onClick={() => {
-              setStatusFilter("all");
-              setQcFilter("all");
-            }}
+            onClick={resetAllFilters}
             className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-              statusFilter === "all" && qcFilter === "all"
+              !hasActiveFilters
                 ? "bg-brand text-brand-foreground shadow-sm ring-1 ring-brand"
                 : "bg-card border border-border/80 text-muted-foreground hover:bg-muted"
             }`}
@@ -362,44 +554,23 @@ function InventoryPage() {
               <span className="opacity-70 font-mono text-[11px]">({counts[s]})</span>
             </button>
           ))}
-        </div>
 
-        {/* Vienna Confectionery Factory QC & FEFO Quick Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground shrink-0 ps-1 flex items-center gap-1">
-            <ShieldCheck className="size-3.5 text-brand" />
-            <span>{lang === "ar" ? "مسار الجودة والتشغيل:" : "QC & Dispatch:"}</span>
-          </span>
+          <div className="h-4 w-px bg-border/80 shrink-0 mx-1" />
+
           <button
             type="button"
-            onClick={() => {
-              setQcFilter("all");
-              setFefoOnly(false);
-            }}
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all ${
-              qcFilter === "all" && !fefoOnly
-                ? "bg-cocoa text-cream shadow-xs"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            {t("tabAll")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setQcFilter("quarantine");
-              setFefoOnly(false);
-            }}
+            onClick={() => setMultiBatchOnly(!multiBatchOnly)}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
-              qcFilter === "quarantine" && !fefoOnly
-                ? "bg-amber-600 text-white shadow-xs"
-                : "bg-amber-100/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300"
+              multiBatchOnly
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-purple-100/70 text-purple-900 hover:bg-purple-100 dark:bg-purple-950/50 dark:text-purple-300"
             }`}
           >
-            <span>🔒</span>
-            <span>{t("filterAwaitingQc")}</span>
-            <span className="opacity-80 font-mono text-[10px]">({qcCounts.quarantine})</span>
+            <Boxes className="size-3" />
+            <span>{t("filterMultiBatchOnly")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({kpis.multiBatchCount})</span>
           </button>
+
           <button
             type="button"
             onClick={() => {
@@ -416,10 +587,28 @@ function InventoryPage() {
             <span>{t("filterFefoGuide")}</span>
             <span className="opacity-80 font-mono text-[10px]">({qcCounts.fefo})</span>
           </button>
+
           <button
             type="button"
             onClick={() => {
-              setQcFilter("approved");
+              setQcFilter(qcFilter === "quarantine" ? "all" : "quarantine");
+              setFefoOnly(false);
+            }}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
+              qcFilter === "quarantine" && !fefoOnly
+                ? "bg-amber-600 text-white shadow-xs"
+                : "bg-amber-100/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300"
+            }`}
+          >
+            <span>🔒</span>
+            <span>{t("filterAwaitingQc")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({qcCounts.quarantine})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setQcFilter(qcFilter === "approved" ? "all" : "approved");
               setFefoOnly(false);
             }}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
@@ -432,11 +621,12 @@ function InventoryPage() {
             <span>{t("filterReleased")}</span>
             <span className="opacity-80 font-mono text-[10px]">({qcCounts.approved})</span>
           </button>
+
           {qcCounts.rejected > 0 && (
             <button
               type="button"
               onClick={() => {
-                setQcFilter("rejected");
+                setQcFilter(qcFilter === "rejected" ? "all" : "rejected");
                 setFefoOnly(false);
               }}
               className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
@@ -450,55 +640,111 @@ function InventoryPage() {
               <span className="opacity-80 font-mono text-[10px]">({qcCounts.rejected})</span>
             </button>
           )}
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 ms-auto"
+            >
+              <X className="size-3" />
+              <span>{t("resetFilters")}</span>
+            </button>
+          )}
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex gap-2 w-full sm:max-w-xs">
-            <Input
-              placeholder={t("search")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              title={t("scanBarcode")}
-              onClick={() => setScannerOpen(true)}
-            >
-              <QrCode className="size-4 text-brand" />
-            </Button>
+        {/* Enhanced Toolbar: Search, Sort Mode, Storage Location, Views & Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+            {/* Search with Barcode Scanner */}
+            <div className="flex gap-1.5 w-full sm:w-64">
+              <Input
+                placeholder={t("search")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title={t("scanBarcode")}
+                onClick={() => setScannerOpen(true)}
+              >
+                <QrCode className="size-4 text-brand" />
+              </Button>
+            </div>
+
+            {/* Sort & Grouping Mode Selector */}
+            <Select value={sortMode} onValueChange={(v) => handleSetSortMode(v as SortMode)}>
+              <SelectTrigger className="w-full sm:w-52 text-xs font-medium">
+                <div className="flex items-center gap-1.5 truncate">
+                  <ArrowUpDown className="size-3.5 text-brand shrink-0" />
+                  <SelectValue placeholder={t("sortMode")} />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="alpha">🔤 {t("sortAlpha")}</SelectItem>
+                <SelectItem value="grouped_materials">📦 {t("sortGrouped")}</SelectItem>
+                <SelectItem value="fefo">⏳ {t("sortFefo")}</SelectItem>
+                <SelectItem value="quantity_desc">📈 {t("sortQtyDesc")}</SelectItem>
+                <SelectItem value="quantity_asc">📉 {t("sortQtyAsc")}</SelectItem>
+                <SelectItem value="multi_batch">🔢 {t("sortMultiBatch")}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Storage Location Filter (if available) */}
+            {storageLocations.length > 0 && (
+              <Select value={storageFilter} onValueChange={setStorageFilter}>
+                <SelectTrigger className="w-full sm:w-44 text-xs">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <MapPin className="size-3.5 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder={t("filterStorageLocation")} />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("allStorageLocations")}</SelectItem>
+                  {storageLocations.map((loc) => (
+                    <SelectItem key={loc} value={loc}>
+                      📍 {loc}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Status Filter */}
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | Status)}>
+              <SelectTrigger className="w-36 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("allStatuses")}</SelectItem>
+                {STATUS_ORDER.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(STATUS_LABEL_KEY[s])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* QC Status Filter */}
+            <Select value={qcFilter} onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}>
+              <SelectTrigger className="w-36 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("allQcStatuses")}</SelectItem>
+                <SelectItem value="quarantine">🔒 {t("quarantine")}</SelectItem>
+                <SelectItem value="approved">✅ {t("approved")}</SelectItem>
+                <SelectItem value="rejected">❌ {t("rejected")}</SelectItem>
+                <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | Status)}>
-            <SelectTrigger className="sm:w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("allStatuses")}</SelectItem>
-              {STATUS_ORDER.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {t(STATUS_LABEL_KEY[s])}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={qcFilter} onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}>
-            <SelectTrigger className="sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("allQcStatuses")}</SelectItem>
-              <SelectItem value="quarantine">🔒 {t("quarantine")}</SelectItem>
-              <SelectItem value="approved">✅ {t("approved")}</SelectItem>
-              <SelectItem value="rejected">❌ {t("rejected")}</SelectItem>
-              <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
+          {/* Action Buttons & View Modes */}
+          <div className="flex flex-wrap items-center gap-2 ms-auto">
             {/* View Mode Switcher */}
             <div className="flex items-center rounded-lg border bg-muted/40 p-0.5">
               <Button
@@ -521,30 +767,34 @@ function InventoryPage() {
               </Button>
             </div>
 
-            <Button variant="outline" onClick={() => setPrintOpen(true)}>
-              <Printer className="size-4" />
+            <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)} className="h-8 gap-1.5 text-xs">
+              <Printer className="size-3.5" />
               <span className="hidden lg:inline">{t("printQcReport")}</span>
             </Button>
 
-            <Button variant="outline" onClick={exportCsv}>
-              <Download className="size-4" />
+            <Button variant="outline" size="sm" onClick={exportCsv} className="h-8 gap-1.5 text-xs">
+              <Download className="size-3.5" />
               <span className="hidden sm:inline">{t("exportCsv")}</span>
             </Button>
 
-            <Button variant="outline" onClick={() => setBackupOpen(true)}>
-              <Archive className="size-4" />
+            <Button variant="outline" size="sm" onClick={() => setBackupOpen(true)} className="h-8 gap-1.5 text-xs">
+              <Archive className="size-3.5" />
               <span className="hidden sm:inline">{t("backupRestoreModalBtn")}</span>
             </Button>
 
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setDialogOpen(true);
-              }}
-            >
-              <Plus className="size-4" />
-              {t("addItem")}
-            </Button>
+            {canEditItems && (
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 text-xs bg-brand hover:bg-brand/90 font-bold"
+                onClick={() => {
+                  setEditing(null);
+                  setDialogOpen(true);
+                }}
+              >
+                <Plus className="size-3.5" />
+                <span>{t("addItem")}</span>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -563,7 +813,7 @@ function InventoryPage() {
         ) : viewMode === "cards" ? (
           /* Cards View (Mobile & Tablet Friendly) */
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {rows.map(({ item, days, status, isFefoFirst }) => {
+            {rows.map(({ item, days, status, isFefoFirst }, index) => {
               const parsedPhotos = parsePhotos(item.photo_path);
               const primaryPath = parsedPhotos[0]?.path;
               const url = primaryPath ? photoUrls.data?.[primaryPath] : undefined;
@@ -571,145 +821,178 @@ function InventoryPage() {
                 .map((p) => ({ url: photoUrls.data?.[p.path] || "", caption: p.caption }))
                 .filter((p) => Boolean(p.url));
 
+              const prevRow = index > 0 ? rows[index - 1] : null;
+              const currentMaterialKey = item.name.trim().toLowerCase();
+              const prevMaterialKey = prevRow ? prevRow.item.name.trim().toLowerCase() : null;
+              const isFirstOfGroup =
+                sortMode === "grouped_materials" && (index === 0 || currentMaterialKey !== prevMaterialKey);
+              const groupStats = isFirstOfGroup ? materialGroupsMap.get(currentMaterialKey) : null;
+
               return (
-                <div
-                  key={item.id}
-                  className="relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md"
-                  style={{ borderTop: `4px solid var(--brand)` }}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-                          <span className="font-semibold text-muted-foreground">
-                            {item.item_code || t("notSet")}
+                <Fragment key={item.id}>
+                  {isFirstOfGroup && groupStats && (
+                    <div className="col-span-full mt-4 first:mt-0 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/60 border border-border/80 px-4 py-2.5 text-foreground shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                          <Boxes className="size-4" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-sm text-cocoa dark:text-cream">{item.name}</span>
+                          <span className="ms-2 rounded-full bg-brand/15 text-brand px-2 py-0.5 text-[11px] font-semibold">
+                            {t("similarBatchesCount", { count: groupStats.batches.length })}
                           </span>
-                          {item.batch_number && (
-                            <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-medium text-brand">
-                              #{item.batch_number}
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {t("totalGroupQuantity", { qty: `${groupStats.totalQty} ${groupStats.unit || ""}`.trim() })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div
+                    className="relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md"
+                    style={{ borderTop: `4px solid var(--brand)` }}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+                            <span className="font-semibold text-muted-foreground">
+                              {item.item_code || t("notSet")}
+                            </span>
+                            {item.batch_number && (
+                              <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-medium text-brand">
+                                #{item.batch_number}
+                              </span>
+                            )}
+                          </div>
+                          <h2 className="text-base font-semibold text-cocoa leading-tight">
+                            {item.name}
+                          </h2>
+                          <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
+                        </div>
+                        <ProductImageThumbnail
+                          url={url}
+                          name={item.name}
+                          itemCode={item.item_code}
+                          batchNumber={item.batch_number}
+                          photoCount={parsedPhotos.length}
+                          size="md"
+                          onClick={() => {
+                            if (url || photoList.length > 0) {
+                              setActiveImage({
+                                id: item.id,
+                                photos: photoList,
+                                url,
+                                name: item.name,
+                                itemCode: item.item_code,
+                                batchNumber: item.batch_number,
+                                supplier: item.supplier,
+                                expiryDate: item.expiry_date,
+                                countdown: countdownText(days, t),
+                                qcStatus: item.qc_status,
+                                photoPathRaw: item.photo_path,
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <StatusPill status={status} />
+                        <QcBadge status={item.qc_status} />
+                        {isFefoFirst && <FefoBadge />}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground block">{t("expiryDate")}</span>
+                          <span className="font-medium font-mono text-foreground">
+                            {item.expiry_date}
+                          </span>
+                          <span className="block text-[10px] text-muted-foreground">
+                            {countdownText(days, t)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block">{t("quantity")}</span>
+                          <span className="font-medium font-mono text-foreground">
+                            {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}` : "—"}
+                          </span>
+                          {item.storage_location && (
+                            <span className="block text-[10px] text-muted-foreground truncate">
+                              📍 {item.storage_location}
                             </span>
                           )}
                         </div>
-                        <h2 className="text-base font-semibold text-cocoa leading-tight">
-                          {item.name}
-                        </h2>
-                        <p className="text-xs text-muted-foreground">{item.supplier || "—"}</p>
                       </div>
-                      <ProductImageThumbnail
-                        url={url}
-                        name={item.name}
-                        itemCode={item.item_code}
-                        batchNumber={item.batch_number}
-                        photoCount={parsedPhotos.length}
-                        size="md"
-                        onClick={() => {
-                          if (url || photoList.length > 0) {
-                            setActiveImage({
-                              photos: photoList,
-                              url,
-                              name: item.name,
-                              itemCode: item.item_code,
-                              batchNumber: item.batch_number,
-                              supplier: item.supplier,
-                              expiryDate: item.expiry_date,
-                              countdown: countdownText(days, t),
-                              qcStatus: item.qc_status,
-                            });
-                          }
-                        }}
-                      />
+
+                      {(item.qc_notes || item.notes) && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {item.qc_notes || item.notes}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <StatusPill status={status} />
-                      <QcBadge status={item.qc_status} />
-                      {isFefoFirst && <FefoBadge />}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
-                      <div>
-                        <span className="text-muted-foreground block">{t("expiryDate")}</span>
-                        <span className="font-medium font-mono text-foreground">
-                          {item.expiry_date}
-                        </span>
-                        <span className="block text-[10px] text-muted-foreground">
-                          {countdownText(days, t)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block">{t("quantity")}</span>
-                        <span className="font-medium font-mono text-foreground">
-                          {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}` : "—"}
-                        </span>
-                        {item.storage_location && (
-                          <span className="block text-[10px] text-muted-foreground truncate">
-                            📍 {item.storage_location}
-                          </span>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-1.5 border-t pt-2">
+                      <div className="flex items-center gap-1">
+                        {canEditItems && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-semibold shadow-xs"
+                            onClick={() => setQuickQcItem(item)}
+                          >
+                            <ShieldCheck className="size-3.5 text-brand" />
+                            <span>{t("inspectQc")}</span>
+                          </Button>
                         )}
-                      </div>
-                    </div>
 
-                    {(item.qc_notes || item.notes) && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {item.qc_notes || item.notes}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-1.5 border-t pt-2">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-semibold shadow-xs"
-                        onClick={() => setQuickQcItem(item)}
-                      >
-                        <ShieldCheck className="size-3.5 text-brand" />
-                        <span>{t("inspectQc")}</span>
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                        title={t("shareViaWhatsApp")}
-                        onClick={() => shareItemOnWhatsApp(item)}
-                      >
-                        <MessageCircle className="size-3.5" />
-                        <span className="hidden sm:inline">{t("shareViaWhatsApp")}</span>
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1 text-xs"
-                        onClick={() => {
-                          setEditing(item);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="size-3.5" />
-                        <span>{t("edit")}</span>
-                      </Button>
-                      {isAdmin && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="gap-1 text-xs text-destructive hover:text-destructive"
-                          disabled={remove.isPending}
-                          onClick={() => {
-                            if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
-                          }}
+                          className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                          title={t("shareViaWhatsApp")}
+                          onClick={() => shareItemOnWhatsApp(item)}
                         >
-                          <Trash2 className="size-3.5" />
-                          <span>{t("delete")}</span>
+                          <MessageCircle className="size-3.5" />
+                          <span className="hidden sm:inline">{t("shareViaWhatsApp")}</span>
                         </Button>
-                      )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {canEditItems && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs"
+                            onClick={() => {
+                              setEditing(item);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                            <span>{t("edit")}</span>
+                          </Button>
+                        )}
+                        {canDeleteItems && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs text-destructive hover:text-destructive"
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                            <span>{t("delete")}</span>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Fragment>
               );
             })}
           </div>
@@ -742,7 +1025,7 @@ function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ item, days, status, isFefoFirst }) => {
+                {rows.map(({ item, days, status, isFefoFirst }, index) => {
                   const parsedPhotos = parsePhotos(item.photo_path);
                   const primaryPath = parsedPhotos[0]?.path;
                   const url = primaryPath ? photoUrls.data?.[primaryPath] : undefined;
@@ -750,123 +1033,156 @@ function InventoryPage() {
                     .map((p) => ({ url: photoUrls.data?.[p.path] || "", caption: p.caption }))
                     .filter((p) => Boolean(p.url));
 
-                  return (
-                    <tr
-                      key={item.id}
-                      className="border-t"
-                      style={{ backgroundColor: STATUS_TINT[status] }}
-                    >
-                      <td className="px-3 py-2">
-                        <StatusPill status={status} />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <QcBadge status={item.qc_status} />
-                          {isFefoFirst && <FefoBadge />}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {item.item_code || t("notSet")}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {item.batch_number ? (
-                          <span className="rounded bg-brand/10 px-1.5 py-0.5 font-medium text-brand">
-                            {item.batch_number}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <ProductImageThumbnail
-                          url={url}
-                          name={item.name}
-                          itemCode={item.item_code}
-                          batchNumber={item.batch_number}
-                          photoCount={parsedPhotos.length}
-                          size="sm"
-                          onClick={() => {
-                            if (url || photoList.length > 0) {
-                              setActiveImage({
-                                photos: photoList,
-                                url,
-                                name: item.name,
-                                itemCode: item.item_code,
-                                batchNumber: item.batch_number,
-                                supplier: item.supplier,
-                                expiryDate: item.expiry_date,
-                                countdown: countdownText(days, t),
-                                qcStatus: item.qc_status,
-                              });
-                            }
-                          }}
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-medium">{item.name}</td>
-                      <td className="px-3 py-2">{item.supplier || "—"}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {item.storage_location || "—"}
-                      </td>
+                  const prevRow = index > 0 ? rows[index - 1] : null;
+                  const currentMaterialKey = item.name.trim().toLowerCase();
+                  const prevMaterialKey = prevRow ? prevRow.item.name.trim().toLowerCase() : null;
+                  const isFirstOfGroup =
+                    sortMode === "grouped_materials" && (index === 0 || currentMaterialKey !== prevMaterialKey);
+                  const groupStats = isFirstOfGroup ? materialGroupsMap.get(currentMaterialKey) : null;
 
-                      <td className="px-3 py-2">
-                        {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "—"}
-                      </td>
-                      <td className="px-3 py-2">{item.production_date || "—"}</td>
-                      <td className="px-3 py-2">{item.expiry_date}</td>
-                      <td className="px-3 py-2">{countdownText(days, t)}</td>
-                      <td className="max-w-[16rem] px-3 py-2 text-muted-foreground">
-                        {item.notes || "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={t("inspectQc")}
-                            title={t("inspectQc")}
-                            className="text-brand hover:text-brand hover:bg-brand/10"
-                            onClick={() => setQuickQcItem(item)}
-                          >
-                            <ShieldCheck className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={t("shareViaWhatsApp")}
-                            title={t("shareViaWhatsApp")}
-                            className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                            onClick={() => shareItemOnWhatsApp(item)}
-                          >
-                            <MessageCircle className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={t("edit")}
+                  return (
+                    <Fragment key={item.id}>
+                      {isFirstOfGroup && groupStats && (
+                        <tr key={`group-table-${currentMaterialKey}`} className="bg-muted/70 font-semibold border-t-2 border-brand/30">
+                          <td colSpan={14} className="px-3 py-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                              <div className="flex items-center gap-2">
+                                <Boxes className="size-4 text-brand" />
+                                <span className="font-bold text-sm text-cocoa dark:text-cream">{item.name}</span>
+                                <span className="rounded-full bg-brand/15 text-brand px-2 py-0.5 text-[11px] font-semibold">
+                                  {t("similarBatchesCount", { count: groupStats.batches.length })}
+                                </span>
+                              </div>
+                              <div className="text-muted-foreground font-mono">
+                                {t("totalGroupQuantity", { qty: `${groupStats.totalQty} ${groupStats.unit || ""}`.trim() })}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      <tr
+                        className="border-t"
+                        style={{ backgroundColor: STATUS_TINT[status] }}
+                      >
+                        <td className="px-3 py-2">
+                          <StatusPill status={status} />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <QcBadge status={item.qc_status} />
+                            {isFefoFirst && <FefoBadge />}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs">
+                          {item.item_code || t("notSet")}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs">
+                          {item.batch_number ? (
+                            <span className="rounded bg-brand/10 px-1.5 py-0.5 font-medium text-brand">
+                              {item.batch_number}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <ProductImageThumbnail
+                            url={url}
+                            name={item.name}
+                            itemCode={item.item_code}
+                            batchNumber={item.batch_number}
+                            photoCount={parsedPhotos.length}
+                            size="sm"
                             onClick={() => {
-                              setEditing(item);
-                              setDialogOpen(true);
+                              if (url || photoList.length > 0) {
+                                setActiveImage({
+                                  id: item.id,
+                                  photos: photoList,
+                                  url,
+                                  name: item.name,
+                                  itemCode: item.item_code,
+                                  batchNumber: item.batch_number,
+                                  supplier: item.supplier,
+                                  expiryDate: item.expiry_date,
+                                  countdown: countdownText(days, t),
+                                  qcStatus: item.qc_status,
+                                  photoPathRaw: item.photo_path,
+                                });
+                              }
                             }}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          {isAdmin && (
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-medium">{item.name}</td>
+                        <td className="px-3 py-2">{item.supplier || "—"}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {item.storage_location || "—"}
+                        </td>
+
+                        <td className="px-3 py-2">
+                          {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}`.trim() : "—"}
+                        </td>
+                        <td className="px-3 py-2">{item.production_date || "—"}</td>
+                        <td className="px-3 py-2">{item.expiry_date}</td>
+                        <td className="px-3 py-2">{countdownText(days, t)}</td>
+                        <td className="max-w-[16rem] px-3 py-2 text-muted-foreground">
+                          {item.notes || "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-1">
+                            {canEditItems && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={t("inspectQc")}
+                                title={t("inspectQc")}
+                                className="text-brand hover:text-brand hover:bg-brand/10"
+                                onClick={() => setQuickQcItem(item)}
+                              >
+                                <ShieldCheck className="size-4" />
+                              </Button>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
-                              aria-label={t("delete")}
-                              disabled={remove.isPending}
-                              title={t("delete")}
-                              onClick={() => {
-                                if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
-                              }}
+                              aria-label={t("shareViaWhatsApp")}
+                              title={t("shareViaWhatsApp")}
+                              className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                              onClick={() => shareItemOnWhatsApp(item)}
                             >
-                              <Trash2 className="size-4 text-destructive" />
+                              <MessageCircle className="size-4" />
                             </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                            {canEditItems && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={t("edit")}
+                                onClick={() => {
+                                  setEditing(item);
+                                  setDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                            )}
+                            {canDeleteItems && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={t("delete")}
+                                disabled={remove.isPending}
+                                title={t("delete")}
+                                onClick={() => {
+                                  if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                                }}
+                              >
+                                <Trash2 className="size-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>

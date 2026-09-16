@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ export function WhatsAppShareDialog({
   thresholds,
   defaultPhone,
 }: Props) {
+  useRegisterBackModal(open, () => onOpenChange(false), "whatsapp-share-modal");
   const [recipientMode, setRecipientMode] = useState<"open" | "saved" | "custom">("open");
   const [customPhone, setCustomPhone] = useState("");
   const [includePhotoLink, setIncludePhotoLink] = useState(true);

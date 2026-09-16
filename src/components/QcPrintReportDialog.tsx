@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Printer, MessageCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { type ItemRow } from "@/components/ItemFormDialog";
 import { type Status, daysUntil, statusFor, type Thresholds } from "@/lib/status";
 import { countdownText } from "@/lib/format";
@@ -17,9 +18,11 @@ interface Props {
 }
 
 export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: Props) {
+  useRegisterBackModal(open, () => onOpenChange(false), "qc-print-report");
   const { t, lang } = useI18n();
   const settings = useSettings();
   const [shareWhatsApp, setShareWhatsApp] = useState(false);
+  useRegisterBackModal(shareWhatsApp, () => setShareWhatsApp(false), "qc-print-whatsapp");
 
   const handlePrint = () => {
     window.print();
@@ -40,6 +43,15 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
     const st = statusFor(daysUntil(i.expiry_date), thresholds);
     return st === "critical" || st === "expired";
   }).length;
+
+  // Sorted items alphabetically by raw material name, then expiry
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const nameComp = a.name.localeCompare(b.name, "ar", { sensitivity: "base", numeric: true });
+      if (nameComp !== 0) return nameComp;
+      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+    });
+  }, [items]);
 
   // Calculate FEFO #1 dispatch priority for approved batches
   const fefoPriorityMap = useMemo(() => {
@@ -84,7 +96,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-4 sm:p-8">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto p-4 sm:p-8 print:max-h-none print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none print:overflow-visible">
           <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 print:hidden">
             <DialogTitle className="text-lg font-semibold text-cocoa">
               {t("qcReportTitle")}
@@ -179,7 +191,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {items.map((it, idx) => {
+                {sortedItems.map((it, idx) => {
                   const days = daysUntil(it.expiry_date);
                   const isFefoFirst = fefoPriorityMap.get(it.id);
                   return (
@@ -225,7 +237,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
           </div>
 
           {/* Signatures & Official Approvals Section */}
-          <div className="mt-8 border-t pt-6">
+          <div className="mt-8 border-t pt-6 print-signatures-section">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-xs">
               <div className="rounded-lg border border-dashed p-4">
                 <p className="font-semibold text-cocoa">{t("preparedBy")}</p>

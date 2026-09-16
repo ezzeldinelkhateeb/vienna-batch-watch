@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Camera, Check, QrCode, Zap, ZapOff, RefreshCw, Upload, Sparkles, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ function playBeepSound() {
 const READER_ID = "vienna-qr-reader";
 
 export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) {
+  useRegisterBackModal(open, () => onOpenChange(false), "scanner-modal");
   const { t, lang } = useI18n();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scannerRef = useRef<any>(null);

@@ -1,9 +1,50 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export const PHOTO_BUCKET = "item-photos";
-export const ACCEPTED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export const ACCEPTED_PHOTO_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];
 
-const MAX_EDGE = 1200;
+const MAX_EDGE = 1400;
+
+/** Check if file is a supported image */
+export function isSupportedImage(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  return ACCEPTED_PHOTO_TYPES.includes(file.type);
+}
+
+/** Physically rotate an image blob or file by given degrees (e.g. 90, 180, 270) using Canvas */
+export async function rotateImageBlob(blobOrFile: Blob | File, degrees: number): Promise<Blob> {
+  const normDeg = ((degrees % 360) + 360) % 360;
+  if (normDeg === 0) return blobOrFile;
+
+  try {
+    const bitmap = await createImageBitmap(blobOrFile);
+    const canvas = document.createElement("canvas");
+    const isSwap = normDeg === 90 || normDeg === 270;
+    canvas.width = isSwap ? bitmap.height : bitmap.width;
+    canvas.height = isSwap ? bitmap.width : bitmap.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return blobOrFile;
+
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((normDeg * Math.PI) / 180);
+    ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2);
+
+    const rotatedBlob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.9),
+    );
+    return rotatedBlob ?? blobOrFile;
+  } catch {
+    return blobOrFile;
+  }
+}
 
 /** Downscale to a reasonable size and re-encode as JPEG. Falls back to the original file. */
 export async function compressImage(file: File): Promise<Blob> {
@@ -19,7 +60,7 @@ export async function compressImage(file: File): Promise<Blob> {
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, width, height);
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.82),
+      canvas.toBlob(resolve, "image/jpeg", 0.85),
     );
     return blob ?? file;
   } catch {

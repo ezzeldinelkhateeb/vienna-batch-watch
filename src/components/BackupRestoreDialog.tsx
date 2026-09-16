@@ -1,5 +1,6 @@
 import { Archive } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ interface BackupRestoreDialogProps {
 }
 
 export function BackupRestoreDialog({ open, onOpenChange }: BackupRestoreDialogProps) {
+  useRegisterBackModal(open, () => onOpenChange(false), "backup-restore-modal");
   const { t } = useI18n();
 
   return (

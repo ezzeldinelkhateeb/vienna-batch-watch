@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
+import { Route as AuthenticatedMonthlyAuditRouteImport } from './routes/_authenticated/monthly-audit'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as ApiPublicHooksExpiryCheckRouteImport } from './routes/api/public/hooks/expiry-check'
@@ -37,6 +38,12 @@ const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMonthlyAuditRoute =
+  AuthenticatedMonthlyAuditRouteImport.update({
+    id: '/monthly-audit',
+    path: '/monthly-audit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedNotificationsRoute =
   AuthenticatedNotificationsRouteImport.update({
     id: '/notifications',
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
@@ -85,6 +94,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
+  '/_authenticated/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/inventory'
+    | '/monthly-audit'
     | '/notifications'
     | '/settings'
     | '/api/public/hooks/expiry-check'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/inventory'
+    | '/monthly-audit'
     | '/notifications'
     | '/settings'
     | '/api/public/hooks/expiry-check'
@@ -115,6 +127,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/inventory'
+    | '/_authenticated/monthly-audit'
     | '/_authenticated/notifications'
     | '/_authenticated/settings'
     | '/api/public/hooks/expiry-check'
@@ -159,6 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/monthly-audit': {
+      id: '/_authenticated/monthly-audit'
+      path: '/monthly-audit'
+      fullPath: '/monthly-audit'
+      preLoaderRoute: typeof AuthenticatedMonthlyAuditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/notifications': {
       id: '/_authenticated/notifications'
       path: '/notifications'
@@ -192,12 +212,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
+  AuthenticatedMonthlyAuditRoute: typeof AuthenticatedMonthlyAuditRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
+  AuthenticatedMonthlyAuditRoute: AuthenticatedMonthlyAuditRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }

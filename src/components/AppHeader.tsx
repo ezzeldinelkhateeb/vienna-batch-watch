@@ -1,12 +1,12 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, Package, Settings as SettingsIcon, Languages } from "lucide-react";
+import { Bell, LogOut, Package, Settings as SettingsIcon, Languages, ClipboardCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 
 export function AppHeader({ showNav = true }: { showNav?: boolean }) {
-  const { t, toggle } = useI18n();
+  const { t, toggle, lang } = useI18n();
   const navigate = useNavigate();
 
   const signOut = async () => {
@@ -63,6 +63,12 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                   <Link to="/">
                     <Package className="size-4" />
                     <span>{t("inventory")}</span>
+                  </Link>
+                </Button>
+                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                  <Link to="/monthly-audit">
+                    <ClipboardCheck className="size-4" />
+                    <span>{lang === "ar" ? "الجرد الشهري" : "Monthly Audit"}</span>
                   </Link>
                 </Button>
                 <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">

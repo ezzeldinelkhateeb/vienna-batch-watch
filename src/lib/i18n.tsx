@@ -239,6 +239,11 @@ const en: Dict = {
   appliedChecklist: "Confectionery Quality Checklist",
   addPhoto: "Add Photo",
   addMorePhotos: "Add More Photos",
+  captureCamera: "Take Photo",
+  chooseFromGallery: "Choose from Gallery",
+  rotatePhoto: "Rotate 90°",
+  saveRotation: "Save Rotation",
+  useSystemCamera: "System Camera",
   photoCaption: "Photo Description (e.g. Bag, Expiry, COA)",
   photoCountLabel: "photos",
   primaryPhoto: "Primary Cover",
@@ -246,6 +251,27 @@ const en: Dict = {
   scanCameraGuide: "Point camera at barcode or QR code",
   scanningInProgress: "Scanning...",
   cameraStartFailed: "Failed to access camera. Please allow camera permissions or upload an image.",
+
+  // Sorting & Inventory KPIs
+  sortMode: "Sort & Grouping",
+  sortAlpha: "Alphabetical (A – Z)",
+  sortGrouped: "Group Similar Materials",
+  sortFefo: "Earliest Expiry (FEFO)",
+  sortQtyDesc: "Quantity: Highest to Lowest",
+  sortQtyAsc: "Quantity: Lowest to Highest",
+  sortMultiBatch: "Multi-batch Materials First",
+  kpiUniqueMaterials: "Unique Materials",
+  kpiTotalBatches: "Total Batches",
+  kpiTotalStock: "Total Stock Qty",
+  kpiCriticalExpired: "Critical & Expired",
+  kpiMultiBatch: "Multi-Batch Materials",
+  kpiApprovedReady: "Approved for Production",
+  filterStorageLocation: "Storage Location",
+  allStorageLocations: "All Storage Locations",
+  filterMultiBatchOnly: "Multi-batch Only",
+  resetFilters: "Reset Filters",
+  similarBatchesCount: "{count} batches",
+  totalGroupQuantity: "Total: {qty}",
 
   // Backup & Restore System
   tabSettingsBackup: "Backup & Restore",
@@ -294,6 +320,7 @@ const en: Dict = {
   totalMaterialsStored: "Total Batches",
   totalPhotosStored: "Stored Photos",
   lastBackupHint: "Keep regular backups on your local computer for disaster recovery.",
+  pressAgainToExit: "Press back again to exit",
 };
 
 const ar: Dict = {
@@ -531,6 +558,11 @@ const ar: Dict = {
   appliedChecklist: "معايير فحص خامات البسكوت والشوكولاتة",
   addPhoto: "إضافة صورة",
   addMorePhotos: "إضافة صور أخرى",
+  captureCamera: "التقاط بالكاميرا",
+  chooseFromGallery: "اختيار من المعرض",
+  rotatePhoto: "تدوير 90°",
+  saveRotation: "حفظ الاتجاه",
+  useSystemCamera: "كاميرا النظام",
   photoCaption: "وصف الصورة (مثال: الشيكارة، الليبل، COA)",
   photoCountLabel: "صور",
   primaryPhoto: "الصورة الرئيسية",
@@ -538,6 +570,27 @@ const ar: Dict = {
   scanCameraGuide: "وجّه الكاميرا نحو الباركود أو رمز QR",
   scanningInProgress: "جاري قراءة الكود...",
   cameraStartFailed: "تعذر تشغيل الكاميرا. يرجى السماح بالأذونات أو رفع صورة الباركود من المعرض.",
+
+  // Sorting & Inventory KPIs
+  sortMode: "طريقة الترتيب والعرض",
+  sortAlpha: "أبجدياً (أ – ي)",
+  sortGrouped: "تجميع الخامات المتشابهة",
+  sortFefo: "الأقرب انتهاءً أولاً (FEFO)",
+  sortQtyDesc: "الكمية: من الأعلى للأقل",
+  sortQtyAsc: "الكمية: من الأقل للأعلى",
+  sortMultiBatch: "الخامات متعددة التشغيلات أولاً",
+  kpiUniqueMaterials: "أصناف الخامات",
+  kpiTotalBatches: "إجمالي التشغيلات",
+  kpiTotalStock: "إجمالي رصيد المخزن",
+  kpiCriticalExpired: "حرجة / منتهية الصلاحية",
+  kpiMultiBatch: "خامات متعددة التشغيلات",
+  kpiApprovedReady: "جاهز للصرف والتشغيل",
+  filterStorageLocation: "موقع التخزين",
+  allStorageLocations: "جميع مواقع التخزين",
+  filterMultiBatchOnly: "متعدد التشغيلات فقط",
+  resetFilters: "إعادة ضبط الفلاتر",
+  similarBatchesCount: "{count} تشغيلات مسجلة",
+  totalGroupQuantity: "إجمالي الكمية: {qty}",
 
   // Backup & Restore System
   tabSettingsBackup: "النسخ الاحتياطي والاستعادة",
@@ -586,6 +639,7 @@ const ar: Dict = {
   totalMaterialsStored: "إجمالي التشغيلات",
   totalPhotosStored: "الصور المحفوظة",
   lastBackupHint: "احرص على الاحتفاظ بنسخ دورية على جهاز الكمبيوتر للرجوع إليها وقت الحاجة.",
+  pressAgainToExit: "اضغط مرة أخرى للخروج من التطبيق",
 };
 
 const dicts: Record<Lang, Dict> = { ar, en };

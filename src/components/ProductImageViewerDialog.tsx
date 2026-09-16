@@ -4,6 +4,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RotateCw,
+  Save,
   Download,
   Maximize2,
   Minimize2,
@@ -14,9 +16,14 @@ import {
   ChevronRight,
   ImageIcon,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { Button } from "@/components/ui/button";
 import { QcBadge, type QcStatusType } from "@/components/StatusPill";
+import { rotateImageBlob, PHOTO_BUCKET, parsePhotos, serializePhotos } from "@/lib/photos";
 
 export interface ViewerPhotoItem {
   url: string;
@@ -24,6 +31,7 @@ export interface ViewerPhotoItem {
 }
 
 export interface ProductImageDetails {
+  id?: string | undefined;
   url?: string | undefined;
   photos?: ViewerPhotoItem[] | undefined;
   name: string;
@@ -33,6 +41,7 @@ export interface ProductImageDetails {
   expiryDate?: string | null | undefined;
   countdown?: string | null | undefined;
   qcStatus?: QcStatusType | null | undefined;
+  photoPathRaw?: string | null | undefined;
 }
 
 interface ProductImageViewerDialogProps {
@@ -40,6 +49,8 @@ interface ProductImageViewerDialogProps {
   onOpenChange: (open: boolean) => void;
   item: ProductImageDetails | null;
   initialIndex?: number | undefined;
+  onSaveRotation?: (index: number, rotatedBlob: Blob) => Promise<void> | void;
+  onSaved?: () => void;
 }
 
 const MIN_ZOOM = 0.6;
@@ -52,6 +63,7 @@ export function ProductImageViewerDialog({
   item,
   initialIndex = 0,
 }: ProductImageViewerDialogProps) {
+  useRegisterBackModal(open, () => onOpenChange(false), "image-viewer-modal");
   const { t, lang } = useI18n();
 
   // Normalize photos list
@@ -66,9 +78,12 @@ export function ProductImageViewerDialog({
     return [];
   }, [item]);
 
+  const queryClient = useQueryClient();
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [rotation, setRotation] = useState<number>(0);
+  const [savingRotation, setSavingRotation] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -85,6 +100,7 @@ export function ProductImageViewerDialog({
       setActiveIndex(Math.min(initialIndex, Math.max(0, photoList.length - 1)));
       setZoom(1);
       setPosition({ x: 0, y: 0 });
+      setRotation(0);
       setIsDragging(false);
       setLoaded(false);
     }
@@ -98,6 +114,7 @@ export function ProductImageViewerDialog({
     setActiveIndex(index);
     setZoom(1);
     setPosition({ x: 0, y: 0 });
+    setRotation(0);
     setLoaded(false);
   };
 
@@ -117,7 +134,7 @@ export function ProductImageViewerDialog({
     }
   };
 
-  // Keyboard navigation (+, -, 0, ArrowLeft, ArrowRight)
+  // Keyboard navigation (+, -, 0, ArrowLeft, ArrowRight, R)
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -130,6 +147,9 @@ export function ProductImageViewerDialog({
       } else if (e.key === "0") {
         e.preventDefault();
         handleReset();
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        handleRotateCw();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         if (lang === "ar") handlePrevPhoto();
@@ -159,6 +179,66 @@ export function ProductImageViewerDialog({
   const handleReset = () => {
     setZoom(1);
     setPosition({ x: 0, y: 0 });
+    setRotation(0);
+  };
+
+  const handleRotateCw = () => {
+    setRotation((prev) => (prev + 90) % 360);
+  };
+
+  const handleSaveRotation = async () => {
+    if (!currentPhoto?.url || rotation % 360 === 0) return;
+    setSavingRotation(true);
+    try {
+      const res = await fetch(currentPhoto.url);
+      const originalBlob = await res.blob();
+      const rotatedBlob = await rotateImageBlob(originalBlob, rotation);
+
+      if (onSaveRotation) {
+        await onSaveRotation(activeIndex, rotatedBlob);
+        setRotation(0);
+        toast.success(lang === "ar" ? "تم حفظ تدوير الصورة بنجاح" : "Image rotation saved successfully");
+        return;
+      }
+
+      if (item?.id) {
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.jpg`;
+        const storagePath = `vienna-photos/${fileName}`;
+        const { error: uploadErr } = await supabase.storage
+          .from(PHOTO_BUCKET)
+          .upload(storagePath, rotatedBlob, { contentType: "image/jpeg", upsert: true });
+
+        if (uploadErr) throw uploadErr;
+
+        const currentPhotos = parsePhotos(item.photoPathRaw);
+        if (currentPhotos.length > 0 && currentPhotos[activeIndex]) {
+          currentPhotos[activeIndex].path = storagePath;
+        } else {
+          currentPhotos.push({ id: `photo-${Date.now()}`, path: storagePath, caption: "" });
+        }
+
+        const newRaw = serializePhotos(currentPhotos);
+        const { error: updateErr } = await supabase
+          .from("items")
+          .update({ photo_path: newRaw })
+          .eq("id", item.id);
+
+        if (updateErr) throw updateErr;
+
+        void queryClient.invalidateQueries({ queryKey: ["items"] });
+        void queryClient.invalidateQueries({ queryKey: ["item-photo-urls"] });
+
+        currentPhoto.url = URL.createObjectURL(rotatedBlob);
+        setRotation(0);
+        toast.success(lang === "ar" ? "تم حفظ اتجاه الصورة الجديد بنجاح" : "Image rotation saved successfully");
+        onSaved?.();
+      }
+    } catch (err) {
+      console.error("Failed to save image rotation:", err);
+      toast.error(lang === "ar" ? "فشل حفظ تدوير الصورة" : "Failed to save image rotation");
+    } finally {
+      setSavingRotation(false);
+    }
   };
 
   // Double click / tap toggle zoom
@@ -444,7 +524,7 @@ export function ProductImageViewerDialog({
             {/* Centered Zoom/Pan Container */}
             <div
               style={{
-                transform: `translate3d(${position.x}px, ${position.y}px, 0px) scale(${zoom})`,
+                transform: `translate3d(${position.x}px, ${position.y}px, 0px) scale(${zoom}) rotate(${rotation}deg)`,
                 transition: isDragging ? "none" : "transform 0.18s cubic-bezier(0.2, 0, 0, 1)",
               }}
               className="relative flex items-center justify-center will-change-transform max-h-full max-w-full"
@@ -500,7 +580,7 @@ export function ProductImageViewerDialog({
             )}
 
             {/* Zoom Controller Pill */}
-            <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-3 py-1 shadow-xl backdrop-blur-md">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-3 py-1 shadow-xl backdrop-blur-md">
               <Button
                 type="button"
                 variant="ghost"
@@ -540,12 +620,25 @@ export function ProductImageViewerDialog({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={handleReset}
-                title={t("resetZoom")}
+                onClick={handleRotateCw}
+                title={t("rotatePhoto")}
                 className="size-7 rounded-full text-white/80 hover:bg-white/15 hover:text-white"
               >
-                <RotateCcw className="size-3.5" />
+                <RotateCw className="size-3.5" />
               </Button>
+
+              {rotation % 360 !== 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveRotation}
+                  disabled={savingRotation}
+                  className="h-7 px-2.5 text-xs bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 rounded-full shadow-md ml-1"
+                >
+                  <Save className="size-3" />
+                  <span>{savingRotation ? t("saving") : t("saveRotation")}</span>
+                </Button>
+              )}
             </div>
 
             {/* Metadata Footer bar */}

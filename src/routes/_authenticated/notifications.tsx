@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { triggerExpiryCheckNow } from "@/lib/whatsapp.functions";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -100,6 +101,7 @@ function NotificationsPage() {
   const [search, setSearch] = useState("");
   const [triggering, setTriggering] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<NotificationRow | null>(null);
+  useRegisterBackModal(Boolean(selectedAlert), () => setSelectedAlert(null), "notification-detail-modal");
   const [copied, setCopied] = useState(false);
 
   const logs = useQuery({

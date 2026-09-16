@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Shield, ShieldCheck, UserPlus, Users, RefreshCw, UserCheck } from "lucide-react";
 import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,10 +17,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+export type UserRole = "admin" | "quality" | "view_only";
+
 interface TeamMember {
   id: string;
   email: string | null;
-  role: "admin" | "member";
+  role: UserRole;
 }
 
 export function TeamManagement({ currentUserId }: { currentUserId?: string | undefined }) {
@@ -27,9 +30,10 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [openAdd, setOpenAdd] = useState(false);
+  useRegisterBackModal(openAdd, () => setOpenAdd(false), "team-management-add-user");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<UserRole>("quality");
   const [creating, setCreating] = useState(false);
 
   const fetchMembers = useCallback(async () => {
@@ -44,11 +48,19 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       if (rErr) throw rErr;
 
       const rolesMap = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
-      const list: TeamMember[] = (profiles ?? []).map((p) => ({
-        id: p.id,
-        email: p.email,
-        role: (rolesMap.get(p.id) as "admin" | "member") || "member",
-      }));
+      const list: TeamMember[] = (profiles ?? []).map((p) => {
+        const rawRole = rolesMap.get(p.id);
+        let normalizedRole: UserRole = "quality";
+        if (rawRole === "admin") normalizedRole = "admin";
+        else if (rawRole === "view_only") normalizedRole = "view_only";
+        else normalizedRole = "quality"; // default & maps legacy member
+
+        return {
+          id: p.id,
+          email: p.email,
+          role: normalizedRole,
+        };
+      });
 
       setMembers(list);
     } catch (err) {
@@ -132,22 +144,28 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       }
 
       const newUserId = authResult.user?.id;
-      if (newUserId && role === "admin") {
+      if (newUserId) {
         await supabase.from("user_roles").upsert({
           user_id: newUserId,
-          role: "admin",
+          role: role,
         });
       }
 
       toast.success(
         lang === "ar"
-          ? `تم إنشاء حساب ${email} بنجاح كـ (${role === "admin" ? "مدير نظام" : "مسؤول جودة/مخزن"})!`
+          ? `تم إنشاء حساب ${email} بنجاح كـ (${
+              role === "admin"
+                ? "مدير نظام"
+                : role === "quality"
+                ? "مسؤول جودة ومخازن"
+                : "مشاهدة فقط"
+            })!`
           : `Account ${email} created successfully as (${role})!`,
       );
 
       setEmail("");
       setPassword("");
-      setRole("member");
+      setRole("quality");
       setOpenAdd(false);
       void fetchMembers();
     } catch (err) {
@@ -157,7 +175,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
     }
   };
 
-  const handleToggleRole = async (member: TeamMember) => {
+  const handleChangeRole = async (member: TeamMember, newRole: UserRole) => {
     if (member.id === currentUserId) {
       toast.error(
         lang === "ar"
@@ -167,7 +185,6 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
       return;
     }
 
-    const newRole = member.role === "admin" ? "member" : "admin";
     try {
       const { error } = await supabase.from("user_roles").upsert({
         user_id: member.id,
@@ -177,7 +194,13 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
 
       toast.success(
         lang === "ar"
-          ? `تم تعديل صلاحية ${member.email} إلى ${newRole === "admin" ? "مدير نظام (Admin)" : "مسؤول جودة (Member)"}`
+          ? `تم تعديل صلاحية ${member.email} إلى (${
+              newRole === "admin"
+                ? "مدير نظام"
+                : newRole === "quality"
+                ? "مسؤول جودة ومخازن"
+                : "مشاهدة فقط"
+            })`
           : `Updated role for ${member.email} to ${newRole}`,
       );
       void fetchMembers();
@@ -267,18 +290,23 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                   <select
                     id="new-user-role"
                     value={role}
-                    onChange={(e) => setRole(e.target.value as "admin" | "member")}
+                    onChange={(e) => setRole(e.target.value as UserRole)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   >
-                    <option value="member">
+                    <option value="quality">
                       {lang === "ar"
-                        ? "مسؤول جودة / أمين مخزن (Member)"
-                        : "QC Inspector / Storekeeper (Member)"}
+                        ? "مسؤول جودة ومخازن (Quality) — إدخال، فحص، تقارير، جرد"
+                        : "QC & Stores (Quality) — Entry, QC release, reports, audit"}
                     </option>
                     <option value="admin">
                       {lang === "ar"
-                        ? "مدير نظام كامل الصلاحيات (Admin)"
-                        : "Full System Administrator (Admin)"}
+                        ? "مدير نظام كامل الصلاحيات (Admin) — كامل الصلاحيات، حذف، قفل"
+                        : "Full Administrator (Admin) — Full access, delete, lock"}
+                    </option>
+                    <option value="view_only">
+                      {lang === "ar"
+                        ? "مشاهدة فقط (View Only) — استعراض وتقارير بدون تعديل"
+                        : "View Only — Read-only access, no edits"}
                     </option>
                   </select>
                 </div>
@@ -328,7 +356,6 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
         ) : (
           members.map((m) => {
             const isSelf = m.id === currentUserId;
-            const isAdminRole = m.role === "admin";
             return (
               <div
                 key={m.id}
@@ -337,12 +364,14 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                 <div className="flex items-center gap-2.5">
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
-                      isAdminRole
+                      m.role === "admin"
                         ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-                        : "bg-blue-500/15 text-blue-700 dark:text-blue-300"
+                        : m.role === "quality"
+                        ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300"
+                        : "bg-slate-500/15 text-slate-800 dark:text-slate-300"
                     }`}
                   >
-                    {isAdminRole ? (
+                    {m.role === "admin" ? (
                       <ShieldCheck className="h-4 w-4" />
                     ) : (
                       <UserCheck className="h-4 w-4" />
@@ -358,33 +387,35 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {isAdminRole
+                      {m.role === "admin"
                         ? lang === "ar"
-                          ? "مدير نظام كامل (Admin)"
-                          : "System Administrator"
+                          ? "مدير نظام كامل الصلاحيات (Admin)"
+                          : "Full System Administrator"
+                        : m.role === "quality"
+                        ? lang === "ar"
+                          ? "مسؤول جودة ومخازن (Quality)"
+                          : "QC Inspector & Storekeeper"
                         : lang === "ar"
-                          ? "مسؤول جودة / مخزن (Member)"
-                          : "QC Inspector / Storekeeper"}
+                        ? "صلاحية مشاهدة فقط (View Only)"
+                        : "View Only Access"}
                     </div>
                   </div>
                 </div>
 
-                {!isSelf && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleToggleRole(m)}
-                    className="h-7 text-xs"
+                {!isSelf ? (
+                  <select
+                    value={m.role}
+                    onChange={(e) => void handleChangeRole(m, e.target.value as UserRole)}
+                    className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus:outline-none focus:ring-1 focus:ring-ring font-medium"
                   >
-                    {isAdminRole
-                      ? lang === "ar"
-                        ? "تحويل إلى Member"
-                        : "Demote to Member"
-                      : lang === "ar"
-                        ? "ترقية إلى Admin"
-                        : "Promote to Admin"}
-                  </Button>
+                    <option value="quality">🔬 {lang === "ar" ? "مسؤول جودة (Quality)" : "Quality"}</option>
+                    <option value="admin">⭐ {lang === "ar" ? "مدير نظام (Admin)" : "Admin"}</option>
+                    <option value="view_only">👁️ {lang === "ar" ? "مشاهدة فقط (View Only)" : "View Only"}</option>
+                  </select>
+                ) : (
+                  <span className="rounded-md bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2.5 py-1 text-xs font-bold">
+                    {lang === "ar" ? "حسابك الحالي" : "Current Account"}
+                  </span>
                 )}
               </div>
             );

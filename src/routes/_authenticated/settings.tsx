@@ -15,8 +15,10 @@ import {
   CheckCircle2,
   Sparkles,
   Archive,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
@@ -100,6 +102,11 @@ function SettingsPage() {
   const [callmebotDiagnostic, setCallmebotDiagnostic] = useState<string | null>(null);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
 
+  // Centralized App Lock State
+  const [isAppLocked, setIsAppLocked] = useState(false);
+  const [lockMessage, setLockMessage] = useState("");
+  const [togglingLock, setTogglingLock] = useState(false);
+
   useEffect(() => {
     if (!settings.data) return;
     setPhone(settings.data.whatsapp_phone ?? "");
@@ -110,7 +117,40 @@ function SettingsPage() {
     setEarly(String(settings.data.thresholds.early));
     setMedium(String(settings.data.thresholds.medium));
     setCritical(String(settings.data.thresholds.critical));
+    setIsAppLocked(Boolean(settings.data.is_app_locked));
+    setLockMessage(settings.data.lock_message || "");
   }, [settings.data]);
+
+  const handleToggleLock = async (newVal: boolean) => {
+    if (!isAdmin) return;
+    setTogglingLock(true);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("app_settings")
+        .update({
+          is_app_locked: newVal,
+          lock_message: lockMessage.trim() || null,
+          locked_at: newVal ? new Date().toISOString() : null,
+          locked_by: newVal ? userRes.user?.id : null,
+        })
+        .eq("id", true);
+
+      if (error) throw error;
+      setIsAppLocked(newVal);
+      await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+      toast.success(
+        newVal
+          ? (lang === "ar" ? "تم قفل التطبيق لجميع المستخدمين بنجاح 🔒" : "App locked for all users 🔒")
+          : (lang === "ar" ? "تم إلغاء قفل التطبيق وفتحه للمستخدمين 🔓" : "App unlocked for all users 🔓"),
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(lang === "ar" ? "فشل تعديل حالة قفل التطبيق" : "Failed to update app lock state");
+    } finally {
+      setTogglingLock(false);
+    }
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,6 +343,81 @@ function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* Admin Central App Lock Card */}
+        {isAdmin && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 sm:p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500 text-slate-950 font-bold">
+                    <Lock className="size-4" />
+                  </div>
+                  <h2 className="text-sm sm:text-base font-bold text-amber-950 dark:text-amber-100">
+                    {lang === "ar" ? "قفل التطبيق المركزي (وضع الصيانة والجرد)" : "Centralized App Lock & Maintenance Mode"}
+                  </h2>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      isAppLocked ? "bg-red-600 text-white animate-pulse" : "bg-emerald-600 text-white"
+                    }`}
+                  >
+                    {isAppLocked
+                      ? lang === "ar"
+                        ? "🔒 النظام مقفل حالياً"
+                        : "🔒 System Locked"
+                      : lang === "ar"
+                        ? "✅ النظام يعمل طبيعياً"
+                        : "✅ Normal Operation"}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900/80 dark:text-amber-200/80">
+                  {lang === "ar"
+                    ? "عند تفعيل القفل، يتم حجب التطبيق فوراً عن جميع الموظفين لمنع أي تعديلات أثناء أعمال الجرد الدوري أو الصيانة."
+                    : "When enabled, all users are blocked from taking actions to prevent data mismatch during audit or maintenance."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <Switch
+                  checked={isAppLocked}
+                  onCheckedChange={handleToggleLock}
+                  disabled={togglingLock}
+                  id="app-lock-switch"
+                />
+                <Label htmlFor="app-lock-switch" className="text-xs font-bold cursor-pointer">
+                  {isAppLocked
+                    ? lang === "ar"
+                      ? "إلغاء القفل (فتح)"
+                      : "Unlock App"
+                    : lang === "ar"
+                      ? "قفل التطبيق الآن"
+                      : "Lock App Now"}
+                </Label>
+              </div>
+            </div>
+
+            {isAppLocked && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20 flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={lockMessage}
+                  onChange={(e) => setLockMessage(e.target.value)}
+                  placeholder={lang === "ar" ? "رسالة القفل المعروضة للمستخدمين..." : "Lock message displayed to users..."}
+                  className="text-xs bg-card"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleToggleLock(true)}
+                  disabled={togglingLock}
+                  className="text-xs shrink-0 bg-card"
+                >
+                  {lang === "ar" ? "تحديث الرسالة" : "Update Message"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Segmented Tabs Navigation */}
         <div className="flex rounded-xl border border-border/80 bg-muted/50 p-1 shadow-xs">

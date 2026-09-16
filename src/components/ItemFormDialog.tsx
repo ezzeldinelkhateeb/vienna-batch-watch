@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { QrCode, X, Plus, Trash2, Camera, Star, Images } from "lucide-react";
+import { QrCode, X, Plus, Trash2, Camera, Star, Images, RotateCw, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useRegisterBackModal } from "@/lib/modal-stack";
 import {
-  ACCEPTED_PHOTO_TYPES,
+  isSupportedImage,
+  rotateImageBlob,
   deleteItemPhoto,
   uploadItemPhoto,
   signedPhotoUrls,
@@ -13,6 +15,8 @@ import {
 } from "@/lib/photos";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { ProductImageViewerDialog } from "@/components/ProductImageViewerDialog";
+import { CameraCaptureModal } from "@/components/CameraCaptureModal";
+import { FlexibleDateInput } from "@/components/FlexibleDateInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,11 +114,19 @@ export function ItemFormDialog({
   const [codeError, setCodeError] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  // Multi-photo state
+  // Multi-photo state & Camera modals
   const fileInput = useRef<HTMLInputElement>(null);
+  const systemCameraRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<FormPhotoItem[]>([]);
+  const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  // Register dialogs in back stack (LIFO order: nested sub-modals close before parent form)
+  useRegisterBackModal(open, () => onOpenChange(false), "item-form-main");
+  useRegisterBackModal(scannerOpen, () => setScannerOpen(false), "item-form-scanner");
+  useRegisterBackModal(viewerOpen, () => setViewerOpen(false), "item-form-viewer");
+  useRegisterBackModal(cameraModalOpen, () => setCameraModalOpen(false), "item-form-camera");
 
   useEffect(() => {
     if (!open) return;
@@ -164,13 +176,23 @@ export function ItemFormDialog({
   const set = (key: keyof FormState) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  const addPhotoFile = (file: File) => {
+    const newItem: FormPhotoItem = {
+      id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      caption: "",
+    };
+    setPhotos((prev) => [...prev, newItem]);
+  };
+
   const pickFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const newItems: FormPhotoItem[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file) continue;
-      if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+      if (!isSupportedImage(file)) {
         toast.error(t("errPhotoType"));
         continue;
       }
@@ -183,6 +205,35 @@ export function ItemFormDialog({
     }
     setPhotos((prev) => [...prev, ...newItems]);
     if (fileInput.current) fileInput.current.value = "";
+  };
+
+  const handleRotatePhoto = async (id: string) => {
+    const target = photos.find((p) => p.id === id);
+    if (!target) return;
+
+    try {
+      let sourceBlob: Blob;
+      if (target.file) {
+        sourceBlob = target.file;
+      } else {
+        const res = await fetch(target.previewUrl);
+        sourceBlob = await res.blob();
+      }
+
+      const rotatedBlob = await rotateImageBlob(sourceBlob, 90);
+      const newFile = new File([rotatedBlob], `rotated-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const newUrl = URL.createObjectURL(rotatedBlob);
+
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, file: newFile, previewUrl: newUrl } : p,
+        ),
+      );
+      toast.success(lang === "ar" ? "تم تدوير الصورة 90°" : "Photo rotated 90°");
+    } catch (err) {
+      console.error("Rotate error:", err);
+      toast.error(lang === "ar" ? "فشل تدوير الصورة" : "Failed to rotate photo");
+    }
   };
 
   const updatePhotoCaption = (id: string, caption: string) => {
@@ -390,22 +441,22 @@ export function ItemFormDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="production_date">{t("productionDate")}</Label>
-              <Input
+              <FlexibleDateInput
                 id="production_date"
-                type="date"
                 value={form.production_date}
-                onChange={set("production_date")}
+                onChange={(val) => setForm((f) => ({ ...f, production_date: val }))}
+                placeholder="5/9/2026"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="expiry_date">
                 {t("expiryDate")} <span className="text-destructive">*</span>
               </Label>
-              <Input
+              <FlexibleDateInput
                 id="expiry_date"
-                type="date"
                 value={form.expiry_date}
-                onChange={set("expiry_date")}
+                onChange={(val) => setForm((f) => ({ ...f, expiry_date: val }))}
+                placeholder="5/9/2026"
                 required
               />
             </div>
@@ -464,9 +515,9 @@ export function ItemFormDialog({
             </div>
           </div>
 
-          {/* Multi-Photo Manager with Descriptions */}
+          {/* Multi-Photo Manager with Camera & Descriptions */}
           <div className="space-y-2.5 rounded-xl border border-border/80 bg-muted/20 p-3.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-bold text-cocoa flex items-center gap-1.5">
                 <Images className="size-4 text-brand" />
                 <span>{t("photoOptional")}</span>
@@ -476,37 +527,92 @@ export function ItemFormDialog({
                   </span>
                 )}
               </Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1 text-xs border-brand/40 text-cocoa hover:bg-brand/10 font-semibold"
-                onClick={() => fileInput.current?.click()}
-              >
-                <Plus className="size-3.5 text-brand" />
-                <span>{photos.length === 0 ? t("addPhoto") : t("addMorePhotos")}</span>
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs bg-brand/10 border-brand/50 text-cocoa hover:bg-brand/20 font-bold"
+                  onClick={() => setCameraModalOpen(true)}
+                >
+                  <Camera className="size-3.5 text-brand" />
+                  <span>{t("captureCamera")}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs border-border text-muted-foreground hover:bg-muted/60"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Plus className="size-3.5" />
+                  <span>{photos.length === 0 ? t("chooseFromGallery") : t("addMorePhotos")}</span>
+                </Button>
+              </div>
             </div>
 
             <input
               ref={fileInput}
               type="file"
               multiple
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*"
               className="hidden"
               onChange={(e) => pickFiles(e.target.files)}
             />
+            <input
+              ref={systemCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) {
+                  addPhotoFile(e.target.files[0]);
+                  e.target.value = "";
+                }
+              }}
+            />
 
             {photos.length === 0 ? (
-              <div
-                onClick={() => fileInput.current?.click()}
-                className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border/80 py-5 text-center text-muted-foreground transition-colors hover:border-brand/50 hover:bg-muted/40"
-              >
-                <Camera className="size-6 text-muted-foreground/60 mb-1" />
-                <p className="text-xs font-medium">{t("addPhoto")}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  JPG, PNG, WebP — يمكنك رفع أكثر من صورة وإضافة وصف لكل صورة
-                </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCameraModalOpen(true)}
+                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-brand/40 bg-brand/5 p-4 text-center transition-all hover:border-brand hover:bg-brand/10 group active:scale-98"
+                >
+                  <div className="size-11 rounded-full bg-brand/15 text-brand flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <Camera className="size-6" />
+                  </div>
+                  <p className="text-xs font-bold text-cocoa">{t("captureCamera")}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {lang === "ar" ? "فتح الكاميرا المباشرة وتصوير الشحنة" : "Open live camera to capture item"}
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-card p-4 text-center transition-all hover:border-brand/40 hover:bg-muted/40 group active:scale-98"
+                >
+                  <div className="size-11 rounded-full bg-muted text-muted-foreground flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <Images className="size-6" />
+                  </div>
+                  <p className="text-xs font-bold text-foreground">{t("chooseFromGallery")}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {lang === "ar" ? "رفع صور من المعرض أو الملفات" : "Upload photos from gallery or files"}
+                  </p>
+                </button>
+
+                <div className="sm:col-span-2 text-center pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => systemCameraRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 text-[11px] text-brand hover:underline font-medium"
+                  >
+                    <Smartphone className="size-3" />
+                    <span>{lang === "ar" ? "أو التقاط مباشر عبر كاميرا أندرويد الأصلية" : "Or capture with native Android camera"}</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2 pt-1">
@@ -546,7 +652,7 @@ export function ItemFormDialog({
                       />
                     </div>
 
-                    {/* Actions: Set as primary or delete */}
+                    {/* Actions: Primary, Rotate, Delete */}
                     <div className="flex items-center gap-0.5 shrink-0">
                       {idx !== 0 && (
                         <Button
@@ -560,6 +666,16 @@ export function ItemFormDialog({
                           <Star className="size-3.5" />
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-brand"
+                        title={lang === "ar" ? "تدوير الصورة 90°" : "Rotate 90°"}
+                        onClick={() => void handleRotatePhoto(p.id)}
+                      >
+                        <RotateCw className="size-3.5" />
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -616,6 +732,19 @@ export function ItemFormDialog({
           open={viewerOpen}
           onOpenChange={setViewerOpen}
           initialIndex={viewerIndex}
+          onSaveRotation={(idx, rotatedBlob) => {
+            const target = photos[idx];
+            if (!target) return;
+            const newFile = new File([rotatedBlob], target.file?.name || `photo_${Date.now()}.jpg`, {
+              type: "image/jpeg",
+            });
+            const newPreviewUrl = URL.createObjectURL(rotatedBlob);
+            setPhotos((prev) =>
+              prev.map((p, i) =>
+                i === idx ? { ...p, file: newFile, previewUrl: newPreviewUrl } : p
+              )
+            );
+          }}
           item={
             photos.length > 0
               ? {
@@ -632,6 +761,12 @@ export function ItemFormDialog({
                 }
               : null
           }
+        />
+
+        <CameraCaptureModal
+          open={cameraModalOpen}
+          onOpenChange={setCameraModalOpen}
+          onPhotoCaptured={addPhotoFile}
         />
       </DialogContent>
     </Dialog>
