@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Package, Bell, Settings, Plus, QrCode, ClipboardCheck } from "lucide-react";
+import { Package, Bell, Settings, Plus, QrCode, ClipboardCheck, ShieldAlert } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface MobileBottomNavProps {
@@ -14,6 +14,7 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
 
   const isInventory = pathname === "/" || pathname === "/inventory";
   const isAudit = pathname === "/monthly-audit";
+  const isWaste = pathname === "/waste-prevention";
   const isNotifications = pathname === "/notifications";
   const isSettings = pathname === "/settings";
 
@@ -52,6 +53,23 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
             <ClipboardCheck className="size-4" />
           </div>
           <span className="text-[10px] leading-none">{lang === "ar" ? "الجرد" : "Audit"}</span>
+        </Link>
+
+        {/* Waste Prevention Tab */}
+        <Link
+          to="/waste-prevention"
+          className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
+            isWaste ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <div
+            className={`flex size-8 items-center justify-center rounded-full transition-all ${
+              isWaste ? "bg-brand/15 text-brand scale-110" : ""
+            }`}
+          >
+            <ShieldAlert className="size-4" />
+          </div>
+          <span className="text-[10px] leading-none">{lang === "ar" ? "الهالك" : "Waste"}</span>
         </Link>
 
         {/* Scan Barcode Button */}

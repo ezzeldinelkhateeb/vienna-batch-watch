@@ -26,6 +26,8 @@ import {
   Boxes,
   MapPin,
   X,
+  Factory,
+  History,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -51,6 +53,8 @@ import {
 } from "@/components/ProductImageViewerDialog";
 import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
+import { DispenseProductionDialog } from "@/components/DispenseProductionDialog";
+import { StockMovementHistoryDialog } from "@/components/StockMovementHistoryDialog";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +130,8 @@ function InventoryPage() {
   const [activeImage, setActiveImage] = useState<ProductImageDetails | null>(null);
   const [whatsAppItem, setWhatsAppItem] = useState<ItemRow | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [dispenseItem, setDispenseItem] = useState<ItemRow | null>(null);
+  const [movementsItem, setMovementsItem] = useState<ItemRow | null | "all">(null);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
     setViewMode(mode);
@@ -782,6 +788,17 @@ function InventoryPage() {
               <span className="hidden sm:inline">{t("backupRestoreModalBtn")}</span>
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMovementsItem("all")}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              title={t("stockMovements")}
+            >
+              <History className="size-3.5 text-brand" />
+              <span className="hidden xl:inline">{t("stockMovements")}</span>
+            </Button>
+
             {canEditItems && (
               <Button
                 size="sm"
@@ -947,6 +964,29 @@ function InventoryPage() {
                             <span>{t("inspectQc")}</span>
                           </Button>
                         )}
+
+                        {canEditItems && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="gap-1 text-xs bg-brand hover:bg-brand/90 text-white font-semibold shadow-xs"
+                            onClick={() => setDispenseItem(item)}
+                            title={t("dispenseToProduction")}
+                          >
+                            <Factory className="size-3.5" />
+                            <span>{t("dispenseToProduction")}</span>
+                          </Button>
+                        )}
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="size-8 p-0 text-muted-foreground hover:text-foreground"
+                          title={t("movementHistory")}
+                          onClick={() => setMovementsItem(item)}
+                        >
+                          <History className="size-3.5" />
+                        </Button>
 
                         <Button
                           size="sm"
@@ -1142,6 +1182,28 @@ function InventoryPage() {
                                 <ShieldCheck className="size-4" />
                               </Button>
                             )}
+                            {canEditItems && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={t("dispenseToProduction")}
+                                title={t("dispenseToProduction")}
+                                className="text-brand hover:bg-brand/15 hover:text-brand"
+                                onClick={() => setDispenseItem(item)}
+                              >
+                                <Factory className="size-4" />
+                              </Button>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={t("movementHistory")}
+                              title={t("movementHistory")}
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() => setMovementsItem(item)}
+                            >
+                              <History className="size-4" />
+                            </Button>
                             <Button
                               size="icon"
                               variant="ghost"
@@ -1235,6 +1297,21 @@ function InventoryPage() {
         open={!!activeImage}
         onOpenChange={(open) => !open && setActiveImage(null)}
         item={activeImage}
+      />
+
+      <DispenseProductionDialog
+        open={Boolean(dispenseItem)}
+        onOpenChange={(open) => !open && setDispenseItem(null)}
+        item={dispenseItem}
+        allItems={items.data ?? []}
+        onDispensed={() => void queryClient.invalidateQueries({ queryKey: ["items"] })}
+        onSelectAnotherItem={(newItem) => setDispenseItem(newItem)}
+      />
+
+      <StockMovementHistoryDialog
+        open={Boolean(movementsItem)}
+        onOpenChange={(open) => !open && setMovementsItem(null)}
+        item={movementsItem === "all" ? null : movementsItem}
       />
 
       <MobileBottomNav

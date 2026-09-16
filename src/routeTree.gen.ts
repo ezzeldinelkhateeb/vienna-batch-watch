@@ -16,6 +16,7 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedMonthlyAuditRouteImport } from './routes/_authenticated/monthly-audit'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedWastePreventionRouteImport } from './routes/_authenticated/waste-prevention'
 import { Route as ApiPublicHooksExpiryCheckRouteImport } from './routes/api/public/hooks/expiry-check'
 import { Route as ApiPublicHooksTelegramWebhookRouteImport } from './routes/api/public/hooks/telegram-webhook'
 
@@ -55,6 +56,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedWastePreventionRoute =
+  AuthenticatedWastePreventionRouteImport.update({
+    id: '/waste-prevention',
+    path: '/waste-prevention',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicHooksExpiryCheckRoute =
   ApiPublicHooksExpiryCheckRouteImport.update({
     id: '/api/public/hooks/expiry-check',
@@ -75,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/waste-prevention': typeof AuthenticatedWastePreventionRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
   '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
@@ -85,6 +93,7 @@ export interface FileRoutesByTo {
   '/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/waste-prevention': typeof AuthenticatedWastePreventionRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
   '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
@@ -97,6 +106,7 @@ export interface FileRoutesById {
   '/_authenticated/monthly-audit': typeof AuthenticatedMonthlyAuditRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/waste-prevention': typeof AuthenticatedWastePreventionRoute
   '/api/public/hooks/expiry-check': typeof ApiPublicHooksExpiryCheckRoute
   '/api/public/hooks/telegram-webhook': typeof ApiPublicHooksTelegramWebhookRoute
 }
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/monthly-audit'
     | '/notifications'
     | '/settings'
+    | '/waste-prevention'
     | '/api/public/hooks/expiry-check'
     | '/api/public/hooks/telegram-webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/monthly-audit'
     | '/notifications'
     | '/settings'
+    | '/waste-prevention'
     | '/api/public/hooks/expiry-check'
     | '/api/public/hooks/telegram-webhook'
   id:
@@ -130,6 +142,7 @@ export interface FileRouteTypes {
     | '/_authenticated/monthly-audit'
     | '/_authenticated/notifications'
     | '/_authenticated/settings'
+    | '/_authenticated/waste-prevention'
     | '/api/public/hooks/expiry-check'
     | '/api/public/hooks/telegram-webhook'
   fileRoutesById: FileRoutesById
@@ -193,6 +206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/waste-prevention': {
+      id: '/_authenticated/waste-prevention'
+      path: '/waste-prevention'
+      fullPath: '/waste-prevention'
+      preLoaderRoute: typeof AuthenticatedWastePreventionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hooks/expiry-check': {
       id: '/api/public/hooks/expiry-check'
       path: '/api/public/hooks/expiry-check'
@@ -215,6 +235,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMonthlyAuditRoute: typeof AuthenticatedMonthlyAuditRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedWastePreventionRoute: typeof AuthenticatedWastePreventionRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -222,6 +243,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMonthlyAuditRoute: AuthenticatedMonthlyAuditRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedWastePreventionRoute: AuthenticatedWastePreventionRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
