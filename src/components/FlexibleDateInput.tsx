@@ -173,46 +173,41 @@ export function FlexibleDateInput({
   };
 
   return (
-    <div className="relative flex items-center">
+    <div className="relative flex items-center w-full" dir="ltr">
       <Input
         id={id}
         type="text"
         dir="ltr"
-        inputMode="text"
+        inputMode="numeric"
         placeholder={placeholder}
         value={text}
         onChange={handleTextChange}
         onBlur={handleBlur}
         required={required}
         disabled={disabled}
-        className={`pe-10 font-mono text-xs ${
-          !isValid && text.trim() ? "border-red-500 focus-visible:ring-red-500" : ""
+        className={`pr-9 ps-2.5 font-mono text-xs ${
+          !isValid && text.trim() ? "border-destructive focus-visible:ring-destructive" : ""
         } ${className || ""}`}
       />
 
-      {/* Hidden native date picker input for calendar trigger */}
-      <input
-        ref={datePickerRef}
-        type="date"
-        value={value || ""}
-        onChange={handlePickerChange}
-        tabIndex={-1}
-        className="sr-only absolute pointer-events-none"
-        aria-hidden="true"
-      />
-
-      {/* Calendar picker button */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={openCalendar}
-        disabled={disabled}
-        className="absolute end-1 h-7 w-7 text-muted-foreground hover:text-brand"
-        title="اختيار من التقويم"
+      {/* Touch-friendly Calendar Picker overlay (works 100% on Android, iOS and Desktop) */}
+      <div
+        className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center size-8 rounded-md text-brand hover:bg-brand/10 cursor-pointer z-10 transition-colors"
+        title="اختيار من التقويم (Calendar)"
       >
-        <CalendarIcon className="size-3.5" />
-      </Button>
+        <CalendarIcon className="size-4 text-brand pointer-events-none" />
+        <input
+          ref={datePickerRef}
+          type="date"
+          value={value || ""}
+          onChange={handlePickerChange}
+          disabled={disabled}
+          tabIndex={0}
+          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full p-0 m-0 z-20"
+          title="اختيار من التقويم"
+          aria-label="اختيار من التقويم"
+        />
+      </div>
     </div>
   );
 }

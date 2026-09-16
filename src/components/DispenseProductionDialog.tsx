@@ -56,7 +56,7 @@ export function DispenseProductionDialog({
 
   const currentQty = Number(item?.quantity) || 0;
   const numDispenseQty = parseFloat(dispenseQty) || 0;
-  const remainingQty = Math.max(0, currentQty - numDispenseQty);
+  const remainingQty = Math.max(0, parseFloat((currentQty - numDispenseQty).toFixed(4)));
   const isInvalidQty = numDispenseQty <= 0 || numDispenseQty > currentQty;
 
   // Reset form when dialog opens or item changes
@@ -75,6 +75,8 @@ export function DispenseProductionDialog({
     if (!item) return null;
     const sameMaterials = allItems.filter(
       (b) =>
+        b.name &&
+        item.name &&
         b.name.trim().toLowerCase() === item.name.trim().toLowerCase() &&
         b.id !== item.id &&
         (b.qc_status ?? "quarantine") === "approved" &&
@@ -215,7 +217,7 @@ export function DispenseProductionDialog({
             <div>
               <span className="text-white/70 block">{t("expiryDate")}</span>
               <span className="font-semibold text-white">
-                {item.expiry_date} ({countdownText(daysUntil(item.expiry_date), lang)})
+                {item.expiry_date} ({countdownText(daysUntil(item.expiry_date), t)})
               </span>
             </div>
           </div>

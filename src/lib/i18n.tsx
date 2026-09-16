@@ -707,7 +707,7 @@ const ar: Dict = {
   printWasteReport: "طباعة خطة مكافحة الهالك",
 };
 
-const dicts: Record<Lang, Dict> = { ar, en };
+export const dicts: Record<Lang, Dict> = { ar, en };
 
 interface I18nValue {
   lang: Lang;

@@ -59,7 +59,10 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
       }
 
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) {
+        console.warn("Could not load stock movements:", error);
+        return [];
+      }
       return (data ?? []) as StockMovementRow[];
     },
   });

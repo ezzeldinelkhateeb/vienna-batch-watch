@@ -18,9 +18,12 @@ import {
   Calendar,
   AlertTriangle,
   ArrowUpDown,
+  LayoutGrid,
+  Table,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { logActivity } from "@/lib/activity-logger";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { AppHeader } from "@/components/AppHeader";
@@ -91,6 +94,21 @@ export function MonthlyAuditPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthYear);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"all" | "pending" | "reviewed" | "new_only">("all");
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("vienna_audit_view_mode");
+      if (saved === "table" || saved === "cards") return saved;
+      return window.innerWidth < 768 ? "cards" : "table";
+    }
+    return "cards";
+  });
+
+  const handleSetViewMode = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vienna_audit_view_mode", mode);
+    }
+  };
 
   // 1. Fetch all active items
   const itemsQuery = useQuery({
@@ -191,29 +209,81 @@ export function MonthlyAuditPage() {
     });
   }, [combinedRows, search, filterType]);
 
-  // Toggle single item review status
+  // Toggle single item review status (safe select -> update/insert)
   const toggleItemReview = useMutation({
     mutationFn: async ({ itemId, nextState }: { itemId: string; nextState: boolean }) => {
-      const payload = {
-        item_id: itemId,
-        month_year: selectedMonth,
-        is_reviewed: nextState,
-        reviewed_by: user?.id ?? null,
-        reviewed_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase
+      const nowIso = new Date().toISOString();
+      const { data: existing, error: selectErr } = await supabase
         .from("batch_monthly_reviews")
-        .upsert(payload, { onConflict: "item_id,month_year" });
+        .select("id")
+        .eq("item_id", itemId)
+        .eq("month_year", selectedMonth)
+        .maybeSingle();
+
+      if (selectErr && !selectErr.message.includes("No rows")) {
+        throw selectErr;
+      }
+
+      let error;
+      if (existing?.id) {
+        const res = await supabase
+          .from("batch_monthly_reviews")
+          .update({
+            is_reviewed: nextState,
+            reviewed_by: user?.id ?? null,
+            reviewed_at: nowIso,
+          })
+          .eq("id", existing.id);
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from("batch_monthly_reviews")
+          .insert({
+            item_id: itemId,
+            month_year: selectedMonth,
+            is_reviewed: nextState,
+            reviewed_by: user?.id ?? null,
+            reviewed_at: nowIso,
+          });
+        error = res.error;
+      }
 
       if (error) throw error;
+      return { itemId, nextState };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["batch_monthly_reviews", selectedMonth] });
+      const targetItem = itemsQuery.data?.find((i) => i.id === data.itemId);
+      void logActivity({
+        action_type: "audit_status_toggle",
+        entity_id: data.itemId,
+        entity_name: targetItem?.name || "صنف مخزني",
+        details: { month_year: selectedMonth, is_reviewed: data.nextState },
+      });
     },
-    onError: (err) => {
-      console.error(err);
-      toast.error(lang === "ar" ? "فشل تحديث حالة المراجعة" : "Failed to update review status");
+    onError: (err: any) => {
+      console.error("toggleItemReview error:", err);
+      const msg = err?.message || err?.details || "";
+      if (
+        msg.includes("batch_monthly_reviews") ||
+        msg.includes("does not exist") ||
+        msg.includes("schema cache") ||
+        msg.includes("relation")
+      ) {
+        toast.error(
+          lang === "ar"
+            ? "جدول الجرد الشهري يحتاج لتشغيل كود SQL في Supabase أولاً لتفعيله."
+            : "Review table missing in Supabase. Please run the SQL migration.",
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(
+          lang === "ar"
+            ? `فشل تحديث حالة المراجعة (${msg || "تحقق من الصلاحيات"})`
+            : `Failed to update review status (${msg || "Permission error"})`,
+          { duration: 6000 }
+        );
+      }
     },
   });
 
@@ -408,6 +478,31 @@ export function MonthlyAuditPage() {
                 <SelectItem value="new_only">{lang === "ar" ? "🆕 شحنات جديدة فقط" : "🆕 New Only"} ({kpis.newThisMonth})</SelectItem>
               </SelectContent>
             </Select>
+            {/* View Mode Toggle: Cards / Table */}
+            <div className="flex items-center rounded-lg border bg-muted/40 p-0.5">
+              <Button
+                type="button"
+                variant={viewMode === "cards" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1"
+                onClick={() => handleSetViewMode("cards")}
+                title={lang === "ar" ? "عرض الكروت (المناسب للموبايل)" : "Cards View"}
+              >
+                <LayoutGrid className="size-3.5" />
+                <span>{lang === "ar" ? "كروت" : "Cards"}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1"
+                onClick={() => handleSetViewMode("table")}
+                title={lang === "ar" ? "عرض الجدول الشامل" : "Table View"}
+              >
+                <Table className="size-3.5" />
+                <span>{lang === "ar" ? "جدول" : "Table"}</span>
+              </Button>
+            </div>
           </div>
 
           {/* Bulk Action Buttons */}
@@ -462,43 +557,30 @@ export function MonthlyAuditPage() {
           </div>
         </div>
 
-        {/* Main Audit Table */}
-        <div className="overflow-x-auto rounded-xl border bg-card shadow-sm print-content">
-          <table className="w-full min-w-[1000px] text-xs">
-            <thead className="bg-muted/70 font-semibold text-cocoa">
-              <tr>
-                <th className="px-3 py-2.5 text-start w-12">#</th>
-                <th className="px-3 py-2.5 text-start">{lang === "ar" ? "حالة التدقيق" : "Audit Status"}</th>
-                <th className="px-3 py-2.5 text-start">{t("name")}</th>
-                <th className="px-3 py-2.5 text-start">{t("batchNumber")}</th>
-                <th className="px-3 py-2.5 text-start">{t("itemCode")}</th>
-                <th className="px-3 py-2.5 text-start">{t("quantity")}</th>
-                <th className="px-3 py-2.5 text-start">{t("storageLocation")}</th>
-                <th className="px-3 py-2.5 text-start">{t("qcStatus")}</th>
-                <th className="px-3 py-2.5 text-start">{t("expiryDate")}</th>
-                <th className="px-3 py-2.5 text-start">{lang === "ar" ? "تاريخ الإضافة" : "Added Date"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="p-8 text-center text-muted-foreground">
-                    {lang === "ar" ? "لا توجد نتائج تطابق خيارات البحث." : "No records matching filters."}
-                  </td>
-                </tr>
-              ) : (
-                filteredRows.map(({ item, review, isReviewed, isNewThisMonth, days, status }, idx) => (
-                  <tr
+        {/* 1. Cards View (Best for Mobile) */}
+        {viewMode === "cards" ? (
+          <div className="space-y-3 print-content">
+            {filteredRows.length === 0 ? (
+              <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground text-xs">
+                {lang === "ar" ? "لا توجد نتائج تطابق خيارات البحث." : "No records matching filters."}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredRows.map(({ item, review, isReviewed, isNewThisMonth, days, status }, idx) => (
+                  <div
                     key={item.id}
-                    className={`transition-colors hover:bg-muted/30 ${
-                      isReviewed ? "bg-emerald-500/5" : ""
+                    className={`rounded-xl border p-4 transition-all shadow-xs ${
+                      isReviewed
+                        ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+                        : "border-border/80 bg-card hover:border-brand/40"
                     }`}
                   >
-                    <td className="px-3 py-2.5 font-mono text-muted-foreground">{idx + 1}</td>
-
-                    {/* Audit Checkbox & Status */}
-                    <td className="px-3 py-2.5">
+                    {/* Header: # Index, Checkbox & Review Status Badge */}
+                    <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-border/40">
                       <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground font-semibold">
+                          #{idx + 1}
+                        </span>
                         <button
                           type="button"
                           disabled={!canEditItems || toggleItemReview.isPending}
@@ -508,100 +590,262 @@ export function MonthlyAuditPage() {
                               nextState: !isReviewed,
                             })
                           }
-                          className={`flex size-5 shrink-0 items-center justify-center rounded border transition-all cursor-pointer ${
+                          className={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-all cursor-pointer ${
                             isReviewed
                               ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                               : "border-border/80 bg-background hover:border-brand"
                           }`}
                         >
-                          {isReviewed && <CheckCheck className="size-3.5" />}
+                          {isReviewed && <CheckCheck className="size-4" />}
                         </button>
-
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                             isReviewed
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                               : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                           }`}
                         >
                           {isReviewed
-                            ? (lang === "ar" ? "تمت المراجعة" : "Reviewed")
-                            : (lang === "ar" ? "بانتظار التدقيق" : "Pending")}
+                            ? (lang === "ar" ? "تمت المراجعة ✅" : "Reviewed ✅")
+                            : (lang === "ar" ? "بانتظار التدقيق ⏳" : "Pending ⏳")}
                         </span>
                       </div>
-                    </td>
 
-                    {/* Raw Material Name + NEW Badge */}
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-cocoa text-sm">{item.name}</span>
+                      <QcBadge status={item.qc_status} />
+                    </div>
+
+                    {/* Item Title & Supplier & NEW Badge */}
+                    <div className="pt-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-cocoa dark:text-cream text-base leading-snug">
+                          {item.name}
+                        </h3>
                         {isNewThisMonth && (
-                          <span className="rounded-full bg-purple-600 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs animate-pulse">
+                          <span className="rounded-full bg-purple-600 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs animate-pulse shrink-0">
                             🆕 {lang === "ar" ? "جديد" : "NEW"}
                           </span>
                         )}
                       </div>
                       {item.supplier && (
-                        <span className="text-[11px] text-muted-foreground block">{item.supplier}</span>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.supplier}</p>
                       )}
-                    </td>
+                    </div>
 
-                    {/* Batch Number */}
-                    <td className="px-3 py-2.5 font-mono font-medium">
-                      {item.batch_number ? (
-                        <span className="rounded bg-brand/10 px-1.5 py-0.5 text-brand">
-                          #{item.batch_number}
+                    {/* Batch Number & Item Code */}
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg text-xs font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground font-sans text-[11px]">{t("batchNumber")}:</span>
+                        {item.batch_number ? (
+                          <span className="rounded bg-brand/10 px-2 py-0.5 font-bold text-brand text-xs">
+                            #{item.batch_number}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                      {item.item_code && (
+                        <div className="text-[11px] text-muted-foreground">
+                          <span>{item.item_code}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Prominent Production Date & Expiry Date */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 bg-background/80 rounded-lg p-2.5 border border-border/50 text-xs">
+                      {/* Production Date */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                          <Calendar className="size-3.5 text-brand shrink-0" />
+                          <span>{lang === "ar" ? "تاريخ الإنتاج" : "Production"}</span>
+                        </div>
+                        <p className="font-mono font-bold text-foreground text-xs">
+                          {item.production_date || "—"}
+                        </p>
+                      </div>
+
+                      {/* Expiry Date */}
+                      <div className="space-y-1 border-s border-border/40 ps-2">
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                          <Clock className="size-3.5 text-amber-500 shrink-0" />
+                          <span>{lang === "ar" ? "تاريخ الانتهاء" : "Expiry"}</span>
+                        </div>
+                        <p className="font-mono font-bold text-xs text-destructive">
+                          {item.expiry_date}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground font-sans block">
+                          ({countdownText(days, t)})
                         </span>
-                      ) : (
-                        "—"
+                      </div>
+                    </div>
+
+                    {/* Footer: Quantity & Storage Location */}
+                    <div className="mt-3 flex items-center justify-between text-xs pt-2 border-t border-border/40 text-muted-foreground">
+                      <div className="font-mono font-semibold text-foreground">
+                        {item.quantity != null ? `${item.quantity} ${item.unit || ""}`.trim() : "—"}
+                      </div>
+                      {item.storage_location && (
+                        <div className="flex items-center gap-1 text-[11px]">
+                          <MapPin className="size-3 text-brand shrink-0" />
+                          <span className="truncate max-w-[140px]">{item.storage_location}</span>
+                        </div>
                       )}
-                    </td>
-
-                    {/* Item Code */}
-                    <td className="px-3 py-2.5 font-mono text-muted-foreground">
-                      {item.item_code || "—"}
-                    </td>
-
-                    {/* Quantity */}
-                    <td className="px-3 py-2.5 font-mono font-semibold">
-                      {item.quantity != null ? `${item.quantity} ${item.unit || ""}`.trim() : "—"}
-                    </td>
-
-                    {/* Storage Location */}
-                    <td className="px-3 py-2.5 text-muted-foreground">
-                      {item.storage_location ? (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="size-3 text-brand" />
-                          <span>{item.storage_location}</span>
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-
-                    {/* QC Status */}
-                    <td className="px-3 py-2.5">
-                      <QcBadge status={item.qc_status} />
-                    </td>
-
-                    {/* Expiry Date */}
-                    <td className="px-3 py-2.5 font-mono whitespace-nowrap">
-                      <span>{item.expiry_date}</span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        {countdownText(days, t)}
-                      </span>
-                    </td>
-
-                    {/* Created Date */}
-                    <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                      {item.created_at ? item.created_at.slice(0, 10) : "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 2. Main Audit Table (with visible Production & Expiry Dates) */
+          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm print-content">
+            <table className="w-full min-w-[1000px] text-xs">
+              <thead className="bg-muted/70 font-semibold text-cocoa">
+                <tr>
+                  <th className="px-3 py-2.5 text-start w-12">#</th>
+                  <th className="px-3 py-2.5 text-start">{lang === "ar" ? "حالة التدقيق" : "Audit Status"}</th>
+                  <th className="px-3 py-2.5 text-start min-w-[200px]">{t("name")}</th>
+                  <th className="px-3 py-2.5 text-start font-mono">{t("batchNumber")}</th>
+                  <th className="px-3 py-2.5 text-start font-mono">{lang === "ar" ? "تاريخ الإنتاج" : "Production Date"}</th>
+                  <th className="px-3 py-2.5 text-start font-mono">{t("expiryDate")}</th>
+                  <th className="px-3 py-2.5 text-start">{t("quantity")}</th>
+                  <th className="px-3 py-2.5 text-start">{t("storageLocation")}</th>
+                  <th className="px-3 py-2.5 text-start">{t("qcStatus")}</th>
+                  <th className="px-3 py-2.5 text-start font-mono">{t("itemCode")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="p-8 text-center text-muted-foreground">
+                      {lang === "ar" ? "لا توجد نتائج تطابق خيارات البحث." : "No records matching filters."}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  filteredRows.map(({ item, review, isReviewed, isNewThisMonth, days, status }, idx) => (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors hover:bg-muted/30 ${
+                        isReviewed ? "bg-emerald-500/5" : ""
+                      }`}
+                    >
+                      <td className="px-3 py-2.5 font-mono text-muted-foreground">{idx + 1}</td>
+
+                      {/* Audit Checkbox & Status */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={!canEditItems || toggleItemReview.isPending}
+                            onClick={() =>
+                              toggleItemReview.mutate({
+                                itemId: item.id,
+                                nextState: !isReviewed,
+                              })
+                            }
+                            className={`flex size-5 shrink-0 items-center justify-center rounded border transition-all cursor-pointer ${
+                              isReviewed
+                                ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
+                                : "border-border/80 bg-background hover:border-brand"
+                            }`}
+                          >
+                            {isReviewed && <CheckCheck className="size-3.5" />}
+                          </button>
+
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                              isReviewed
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            }`}
+                          >
+                            {isReviewed
+                              ? (lang === "ar" ? "تمت المراجعة" : "Reviewed")
+                              : (lang === "ar" ? "بانتظار التدقيق" : "Pending")}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Raw Material Name + Supplier + NEW Badge + In-column Dates */}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-cocoa text-sm">{item.name}</span>
+                          {isNewThisMonth && (
+                            <span className="rounded-full bg-purple-600 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs animate-pulse">
+                              🆕 {lang === "ar" ? "جديد" : "NEW"}
+                            </span>
+                          )}
+                        </div>
+                        {item.supplier && (
+                          <span className="text-[11px] text-muted-foreground block">{item.supplier}</span>
+                        )}
+                        {/* Compact dates visible even without scrolling on mobile */}
+                        <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono flex-wrap">
+                          <span className="bg-muted px-1.5 py-0.5 rounded text-foreground">
+                            إنتاج: <strong>{item.production_date || "—"}</strong>
+                          </span>
+                          <span className="bg-amber-500/10 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded font-bold">
+                            انتهاء: {item.expiry_date}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Batch Number */}
+                      <td className="px-3 py-2.5 font-mono font-medium">
+                        {item.batch_number ? (
+                          <span className="rounded bg-brand/10 px-1.5 py-0.5 text-brand font-bold">
+                            #{item.batch_number}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+
+                      {/* Production Date Column */}
+                      <td className="px-3 py-2.5 font-mono whitespace-nowrap font-medium text-foreground">
+                        {item.production_date || "—"}
+                      </td>
+
+                      {/* Expiry Date Column */}
+                      <td className="px-3 py-2.5 font-mono whitespace-nowrap">
+                        <span className="font-bold text-destructive">{item.expiry_date}</span>
+                        <span className="block text-[10px] text-muted-foreground font-sans">
+                          {countdownText(days, t)}
+                        </span>
+                      </td>
+
+                      {/* Quantity */}
+                      <td className="px-3 py-2.5 font-mono font-semibold">
+                        {item.quantity != null ? `${item.quantity} ${item.unit || ""}`.trim() : "—"}
+                      </td>
+
+                      {/* Storage Location */}
+                      <td className="px-3 py-2.5 text-muted-foreground">
+                        {item.storage_location ? (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="size-3 text-brand shrink-0" />
+                            <span>{item.storage_location}</span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+
+                      {/* QC Status */}
+                      <td className="px-3 py-2.5">
+                        <QcBadge status={item.qc_status} />
+                      </td>
+
+                      {/* Item Code */}
+                      <td className="px-3 py-2.5 font-mono text-muted-foreground">
+                        {item.item_code || "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </main>
 
       <MobileBottomNav />
