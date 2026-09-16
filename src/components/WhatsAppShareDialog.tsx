@@ -184,7 +184,7 @@ export function WhatsAppShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto p-5 sm:p-6 text-foreground">
+      <DialogContent className="max-h-[92dvh] sm:max-h-[92vh] max-w-xl overflow-y-auto p-4 sm:p-5 sm:p-6 text-foreground">
         <DialogHeader className="border-b pb-3">
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold text-cocoa">
             <div className="flex size-8 items-center justify-center rounded-lg bg-[#25D366]/15 text-[#25D366]">

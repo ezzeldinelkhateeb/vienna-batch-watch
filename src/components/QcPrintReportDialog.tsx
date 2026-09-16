@@ -96,7 +96,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto p-4 sm:p-8 print:max-h-none print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none print:overflow-visible">
+        <DialogContent className="max-h-[92dvh] sm:max-h-[92vh] max-w-5xl overflow-y-auto p-4 sm:p-8 print:max-h-none print:max-w-none print:w-full print:p-0 print:border-none print:shadow-none print:overflow-visible">
           <DialogHeader className="flex flex-row items-center justify-between border-b pb-4 print:hidden">
             <DialogTitle className="text-lg font-semibold text-cocoa">
               {t("qcReportTitle")}

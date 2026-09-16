@@ -242,7 +242,7 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-4 sm:p-6 overflow-hidden">
+      <DialogContent className="w-full max-w-[95vw] sm:max-w-md p-4 sm:p-6 overflow-hidden max-h-[92dvh] sm:max-h-[90vh]">
         <DialogHeader className="border-b pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

@@ -230,7 +230,7 @@ export function CameraCaptureModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-black text-white border-white/20">
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-black text-white border-white/20 max-h-[92dvh] sm:max-h-none" disableSwipeToClose hideDragHandle>
           <DialogHeader className="p-3 bg-gradient-to-b from-black/90 to-transparent flex flex-row items-center justify-between z-20">
             <DialogTitle className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
               <Camera className="size-4 text-brand" />

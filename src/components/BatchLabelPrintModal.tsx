@@ -63,7 +63,7 @@ export function BatchLabelPrintModal({ open, onOpenChange, item }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm sm:text-base font-bold text-cocoa flex items-center gap-2">
               <Tag className="size-4 text-brand" />

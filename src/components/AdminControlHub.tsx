@@ -946,7 +946,7 @@ export function AdminControlHub() {
 
       {/* Button Create/Edit Dialog */}
       <Dialog open={buttonModalOpen} onOpenChange={setButtonModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm sm:text-base font-bold text-cocoa flex items-center gap-2">
               <LinkIcon className="size-4 text-brand" />

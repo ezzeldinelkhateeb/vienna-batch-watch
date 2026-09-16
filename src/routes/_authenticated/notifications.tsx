@@ -533,7 +533,7 @@ function NotificationsPage() {
 
       {/* Alert Message Details Dialog */}
       <Dialog open={!!selectedAlert} onOpenChange={(open) => !open && setSelectedAlert(null)}>
-        <DialogContent className="max-w-lg p-5">
+        <DialogContent className="max-w-lg p-4 sm:p-5 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-cocoa">
               <Bell className="size-5 text-brand" />

@@ -170,6 +170,35 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    /* Prevent content from sliding under iOS Home Indicator */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Prevent iOS Safari input auto-zoom (requires font-size >= 16px on inputs) */
+  @supports (-webkit-touch-callout: none) {
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="search"],
+    input[type="password"],
+    input[type="date"],
+    input[type="datetime-local"],
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Touch interaction optimizations */
+  button, [role="button"], a {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent pull-to-refresh on Android Chrome from conflicting with swipe gestures */
+  body {
+    overscroll-behavior-y: contain;
   }
 }
 

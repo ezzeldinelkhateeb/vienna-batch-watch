@@ -244,7 +244,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                 {lang === "ar" ? "إضافة عضو جديد" : "Add Member"}
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="w-full max-w-[95vw] sm:max-w-md max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {lang === "ar" ? "إنشاء حساب موظف جديد" : "Create New Team Member"}
