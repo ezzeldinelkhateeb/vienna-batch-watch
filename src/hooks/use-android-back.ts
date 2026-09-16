@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
-import { closeTopModal, hasOpenModal } from "@/lib/modal-stack";
+import { closeTopModal, hasOpenModal, isProgrammaticPopActive } from "@/lib/modal-stack";
 
 const GUARD_STATE_KEY = "__vienna_back_guard__";
 
@@ -54,7 +54,7 @@ export function useAndroidBack() {
     pushGuard();
 
     const handlePopState = () => {
-      if (isExitingRef.current) return;
+      if (isExitingRef.current || isProgrammaticPopActive()) return;
 
       // 1. Priority 1: Check if any modal/dialog/sheet is currently open
       if (hasOpenModal()) {

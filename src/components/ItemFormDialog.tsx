@@ -391,12 +391,12 @@ export function ItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg p-0 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden">
+        <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-5 pb-3 border-b border-border shrink-0">
           <DialogTitle>{item ? t("editItem") : t("addItem")}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={submit} className="space-y-4 pt-2">
+        <form id="item-form" onSubmit={submit} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 overscroll-contain">
           {/* Item Code with Barcode Scanner button */}
           <div className="space-y-1.5">
             <Label htmlFor="item_code">
@@ -737,15 +737,16 @@ export function ItemFormDialog({
             />
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? t("saving") : t("save")}
-            </Button>
-          </DialogFooter>
         </form>
+
+        <DialogFooter className="gap-2 px-4 sm:px-6 py-3 border-t border-border shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))]">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            {t("cancel")}
+          </Button>
+          <Button form="item-form" type="submit" disabled={busy}>
+            {busy ? t("saving") : t("save")}
+          </Button>
+        </DialogFooter>
 
         <BarcodeScannerDialog
           open={scannerOpen}

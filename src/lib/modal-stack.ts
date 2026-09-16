@@ -10,6 +10,12 @@ export interface RegisteredModal {
 // Global in-memory stack of registered modals (LIFO order)
 const modalStack: RegisteredModal[] = [];
 
+let isProgrammaticPop = false;
+
+export function isProgrammaticPopActive(): boolean {
+  return isProgrammaticPop;
+}
+
 /**
  * Register an open modal in the back-navigation stack.
  * Returns an unregister cleanup function.
@@ -23,10 +29,44 @@ export function registerModal(id: string, close: ModalCloseFn): () => void {
 
   modalStack.push({ id, close });
 
+  // Synchronize with browser history so hardware/browser back or edge-swipe pops this modal
+  if (typeof window !== "undefined") {
+    try {
+      const state = window.history.state || {};
+      window.history.pushState(
+        { ...state, __vienna_modal__: id, ts: Date.now() },
+        "",
+        window.location.href,
+      );
+    } catch {
+      // pushState restrictions fallback
+    }
+  }
+
+  let isUnregistered = false;
   return () => {
+    if (isUnregistered) return;
+    isUnregistered = true;
+
     const idx = modalStack.findIndex((m) => m.id === id);
     if (idx !== -1) {
       modalStack.splice(idx, 1);
+    }
+
+    // If this modal's history entry is currently the active state, pop it cleanly
+    if (typeof window !== "undefined") {
+      try {
+        const state = window.history.state;
+        if (state && state.__vienna_modal__ === id) {
+          isProgrammaticPop = true;
+          window.history.back();
+          setTimeout(() => {
+            isProgrammaticPop = false;
+          }, 120);
+        }
+      } catch {
+        // ignore
+      }
     }
   };
 }

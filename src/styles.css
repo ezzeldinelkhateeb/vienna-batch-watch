@@ -226,6 +226,19 @@
     margin: 8mm 10mm;
   }
 
+  /* Force light color scheme — kills dark mode in ALL print contexts */
+  html {
+    color-scheme: light !important;
+  }
+
+  /* Nuclear option: force white background on everything */
+  * {
+    background-color: transparent !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* Reset body and background */
   html,
   body {
@@ -238,8 +251,6 @@
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
 
   /* When a modal dialog is actively open and being printed, hide main app container */

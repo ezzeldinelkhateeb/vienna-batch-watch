@@ -149,7 +149,7 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="max-h-[92dvh] sm:max-h-[92vh] max-w-2xl overflow-y-auto p-4 sm:p-6">
         <DialogHeader className="border-b pb-3 text-start">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand">
             <Building2 className="size-4" />

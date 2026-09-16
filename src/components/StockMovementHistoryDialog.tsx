@@ -88,7 +88,7 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
+      <DialogContent className="max-w-3xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
         {/* Header */}
         <div className="bg-gradient-to-r from-cocoa to-brand p-5 text-white">
           <DialogHeader>

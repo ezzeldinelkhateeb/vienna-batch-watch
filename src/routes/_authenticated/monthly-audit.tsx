@@ -341,6 +341,205 @@ export function MonthlyAuditPage() {
     },
   });
 
+  // Dedicated clean print window (bypasses dark mode & iOS blank-page issues)
+  const handlePrint = () => {
+    const monthLabel = formatMonthLabel(selectedMonth, lang);
+    const printDate = new Date().toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const factoryName = settings.data?.factory_name || "مصنع فيينا — Vienna Factory";
+
+    const tableRows = filteredRows
+      .map(({ item, isReviewed, isNewThisMonth }, idx) => {
+        const reviewMark = isReviewed ? "✓" : "";
+        const newBadge = isNewThisMonth ? " 🆕" : "";
+        const batchNum = item.batch_number ? `#${item.batch_number}` : "—";
+        const qty = item.quantity != null ? `${item.quantity} ${item.unit || ""}`.trim() : "—";
+        const rowBg = isReviewed ? "#f0fdf4" : "#ffffff";
+        const statusText = isReviewed ? (lang === "ar" ? "تمت المراجعة" : "Reviewed") : (lang === "ar" ? "بانتظار التدقيق" : "Pending");
+        const statusColor = isReviewed ? "#15803d" : "#b45309";
+        return `<tr style="background:${rowBg}">
+          <td style="text-align:center">${idx + 1}</td>
+          <td style="text-align:center;font-size:14px;color:${isReviewed ? "#15803d" : "#94a3b8"}">${reviewMark}</td>
+          <td style="color:${statusColor};font-weight:600">${statusText}</td>
+          <td style="font-weight:700">${item.name}${newBadge}</td>
+          <td>${item.supplier || "—"}</td>
+          <td style="font-family:monospace;font-weight:700">${batchNum}</td>
+          <td style="font-family:monospace">${item.production_date || "—"}</td>
+          <td style="font-family:monospace;color:#dc2626;font-weight:700">${item.expiry_date || "—"}</td>
+          <td style="font-family:monospace">${qty}</td>
+          <td>${item.storage_location || "—"}</td>
+          <td style="font-family:monospace;color:#64748b">${item.item_code || "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="${lang === "ar" ? "ar" : "en"}" dir="${lang === "ar" ? "rtl" : "ltr"}">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${lang === "ar" ? "كشف الجرد الشهري" : "Monthly Audit Sheet"} — ${monthLabel}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    background:#ffffff !important;
+    color:#0f172a !important;
+    font-family:'Segoe UI',Arial,'Noto Sans Arabic',sans-serif;
+    font-size:10pt;
+    direction:${lang === "ar" ? "rtl" : "ltr"};
+  }
+  @page { size:A4 landscape; margin:8mm 10mm; }
+  .print-header {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding-bottom:8px;
+    border-bottom:2.5px solid #0f172a;
+    margin-bottom:8px;
+  }
+  .factory-name { font-size:16pt; font-weight:900; color:#0f172a; }
+  .factory-sub { font-size:9pt; color:#475569; margin-top:2px; }
+  .audit-meta { text-align:${lang === "ar" ? "left" : "right"}; font-size:9pt; }
+  .audit-meta strong { font-size:11pt; font-weight:800; color:#0f172a; }
+  .kpi-bar {
+    display:flex;
+    justify-content:space-between;
+    background:#f1f5f9;
+    border:1px solid #cbd5e1;
+    border-radius:6px;
+    padding:5px 12px;
+    margin-bottom:8px;
+    font-size:8.5pt;
+    font-family:monospace;
+    color:#1e293b;
+  }
+  .kpi-bar span strong { font-size:10pt; }
+  table {
+    width:100%;
+    border-collapse:collapse;
+    font-size:7.5pt;
+    table-layout:fixed;
+  }
+  thead tr { background:#1e293b !important; color:#ffffff !important; }
+  th {
+    background:#1e293b !important;
+    color:#ffffff !important;
+    font-weight:700;
+    padding:5px 6px;
+    border:1px solid #334155;
+    font-size:7.5pt;
+    white-space:nowrap;
+  }
+  td {
+    padding:4px 6px;
+    border:1px solid #e2e8f0;
+    font-size:7.5pt;
+    vertical-align:middle;
+    color:#0f172a !important;
+    background:inherit;
+  }
+  tr:nth-child(even) { background:#f8fafc; }
+  .signatures {
+    display:flex;
+    justify-content:space-between;
+    margin-top:20px;
+    padding-top:12px;
+    border-top:1.5px solid #94a3b8;
+  }
+  .sig-box { text-align:center; width:200px; }
+  .sig-box p { font-weight:700; font-size:9pt; }
+  .sig-box .sub { font-size:8pt; color:#64748b; margin-top:2px; }
+  .sig-line {
+    margin-top:36px;
+    border-bottom:1.5px dotted #94a3b8;
+    width:100%;
+  }
+  @media print {
+    body { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    thead { display:table-header-group !important; }
+    tr { page-break-inside:avoid !important; }
+  }
+</style>
+</head>
+<body>
+<div class="print-header">
+  <div>
+    <div class="factory-name">${factoryName}</div>
+    <div class="factory-sub">${lang === "ar" ? "كشف الجرد والتدقيق الشهري لمطابقة الباتشات وتواريخ الصلاحية" : "Monthly Raw Material Inventory Audit & Batch Reconciliation"}</div>
+  </div>
+  <div class="audit-meta">
+    <p><strong>${lang === "ar" ? "شهر الجرد:" : "Audit Month:"} ${monthLabel}</strong></p>
+    <p style="margin-top:3px;color:#475569">${lang === "ar" ? "تاريخ الطباعة:" : "Printed:"} ${printDate}</p>
+  </div>
+</div>
+<div class="kpi-bar">
+  <span>${lang === "ar" ? "إجمالي الباتشات" : "Total Batches"}: <strong>${kpis.total}</strong></span>
+  <span>${lang === "ar" ? "تمت مراجعته" : "Reviewed"}: <strong>${kpis.reviewed}</strong> (${kpis.progress}%)</span>
+  <span>${lang === "ar" ? "بانتظار المراجعة" : "Pending"}: <strong>${kpis.pending}</strong></span>
+  <span>${lang === "ar" ? "شحنات جديدة" : "New Batches"}: <strong>${kpis.newThisMonth}</strong></span>
+  <span>${lang === "ar" ? "المُراجع" : "Audited by"}: <strong>${user?.email || (lang === "ar" ? "فريق الجودة والمخازن" : "QC & Warehouse Team")}</strong></span>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:30px">#</th>
+      <th style="width:28px">${lang === "ar" ? "✓" : "✓"}</th>
+      <th style="width:90px">${lang === "ar" ? "حالة التدقيق" : "Status"}</th>
+      <th style="width:160px">${lang === "ar" ? "اسم الصنف" : "Item Name"}</th>
+      <th style="width:100px">${lang === "ar" ? "المورد" : "Supplier"}</th>
+      <th style="width:80px">${lang === "ar" ? "رقم الباتش" : "Batch No."}</th>
+      <th style="width:80px">${lang === "ar" ? "تاريخ الإنتاج" : "Prod. Date"}</th>
+      <th style="width:80px">${lang === "ar" ? "تاريخ الانتهاء" : "Expiry Date"}</th>
+      <th style="width:70px">${lang === "ar" ? "الكمية" : "Qty"}</th>
+      <th style="width:90px">${lang === "ar" ? "موقع التخزين" : "Location"}</th>
+      <th style="width:75px">${lang === "ar" ? "كود الصنف" : "Item Code"}</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tableRows}
+  </tbody>
+</table>
+<div class="signatures">
+  <div class="sig-box">
+    <p>${lang === "ar" ? "أمين / مسؤول المخزن" : "Warehouse Keeper"}</p>
+    <div class="sub">${lang === "ar" ? "الاسم والتوقيع" : "Name & Signature"}</div>
+    <div class="sig-line"></div>
+  </div>
+  <div class="sig-box">
+    <p>${lang === "ar" ? "مراقب الجودة (QC)" : "Quality Controller"}</p>
+    <div class="sub">${lang === "ar" ? "الاسم والتوقيع" : "Name & Signature"}</div>
+    <div class="sig-line"></div>
+  </div>
+  <div class="sig-box">
+    <p>${lang === "ar" ? "مدير الإنتاج والمصنع" : "Production Manager"}</p>
+    <div class="sub">${lang === "ar" ? "الاعتماد النهائي" : "Final Approval"}</div>
+    <div class="sig-line"></div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
+    if (!printWindow) {
+      // Fallback: try window.print() if popup blocked
+      window.print();
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    // Give browser time to render before print dialog
+    setTimeout(() => {
+      printWindow.print();
+      // Close window after print dialog closes (works on most browsers)
+      printWindow.addEventListener("afterprint", () => printWindow.close());
+    }, 600);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
@@ -583,7 +782,7 @@ export function MonthlyAuditPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => window.print()}
+              onClick={() => handlePrint()}
               className="h-8 gap-1.5 text-xs"
             >
               <Printer className="size-3.5" />
