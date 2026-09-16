@@ -16,6 +16,7 @@ import {
   Sparkles,
   Archive,
   Lock,
+  Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +36,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { TeamManagement } from "@/components/TeamManagement";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { BackupRestoreManager } from "@/components/BackupRestoreManager";
+import { AdminControlHub } from "@/components/AdminControlHub";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +48,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export type SettingsTab = "alerts" | "thresholds" | "team" | "backup" | "admin_hub";
+
 export const Route = createFileRoute("/_authenticated/settings")({
+  validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => ({
+    tab: (search.tab as SettingsTab) || undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Settings — Vienna Expiry Tracker" },
@@ -64,11 +71,10 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-type SettingsTab = "alerts" | "thresholds" | "team" | "backup";
-
 function SettingsPage() {
   const { t, lang } = useI18n();
   const { session, isAdmin } = useAuth();
+  const search = Route.useSearch();
   const settings = useSettings();
   const queryClient = useQueryClient();
 
@@ -77,7 +83,13 @@ function SettingsPage() {
   const runCheckNow = useServerFn(triggerExpiryCheckNow);
   const registerWebhook = useServerFn(registerTelegramBotWebhook);
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>("alerts");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(search?.tab || "alerts");
+
+  useEffect(() => {
+    if (search?.tab) {
+      setActiveTab(search.tab);
+    }
+  }, [search?.tab]);
 
   // WhatsApp state
   const [phone, setPhone] = useState("");
@@ -474,6 +486,21 @@ function SettingsPage() {
             <Archive className="size-4 text-brand" />
             <span>{t("tabSettingsBackup")}</span>
           </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("admin_hub")}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+                activeTab === "admin_hub"
+                  ? "bg-card text-cocoa font-semibold shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Sliders className="size-4 text-brand" />
+              <span>{lang === "ar" ? "لوحة الأدمن" : "Admin Hub"}</span>
+            </button>
+          )}
         </div>
 
         {/* Tab 1: Alert Channels & Manual Check */}
@@ -798,6 +825,9 @@ function SettingsPage() {
 
         {/* Tab 4: Smart Backup & Restore */}
         {activeTab === "backup" && <BackupRestoreManager />}
+
+        {/* Tab 5: Master Admin Control Hub */}
+        {activeTab === "admin_hub" && isAdmin && <AdminControlHub />}
 
         <WhatsAppShareDialog
           open={whatsAppDialogOpen}

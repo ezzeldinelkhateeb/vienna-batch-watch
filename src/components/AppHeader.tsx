@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, LogOut, Package, Settings as SettingsIcon, Languages, ClipboardCheck, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useSettings } from "@/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 
 export function AppHeader({ showNav = true }: { showNav?: boolean }) {
   const { t, toggle, lang } = useI18n();
   const navigate = useNavigate();
+  const settings = useSettings();
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -35,12 +37,17 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
 
   const urgentCount = urgentCountQuery.data ?? 0;
 
+  const brandName = settings.data?.factory_name || "Vienna";
+  const brandTagline = settings.data?.system_tagline || t("brandTagline");
+  const enableAudit = settings.data?.feature_flags.enable_monthly_audit !== false;
+  const enableWaste = settings.data?.feature_flags.enable_waste_prevention !== false;
+
   return (
     <header className="brand-header">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
         <Link to="/" className="block">
-          <span className="brand-script block text-[40px] sm:text-[44px]">Vienna</span>
-          <span className="brand-tagline block">{t("brandTagline")}</span>
+          <span className="brand-script block text-[40px] sm:text-[44px]">{brandName}</span>
+          <span className="brand-tagline block">{brandTagline}</span>
           <span className="mt-1 block text-[13px] text-cream/75">{t("systemSubtitle")}</span>
         </Link>
 
@@ -65,18 +72,24 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                     <span>{t("inventory")}</span>
                   </Link>
                 </Button>
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
-                  <Link to="/monthly-audit">
-                    <ClipboardCheck className="size-4" />
-                    <span>{lang === "ar" ? "الجرد الشهري" : "Monthly Audit"}</span>
-                  </Link>
-                </Button>
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
-                  <Link to="/waste-prevention">
-                    <ShieldAlert className="size-4 text-amber-300" />
-                    <span>{lang === "ar" ? "منع الهالك" : "Waste Prevention"}</span>
-                  </Link>
-                </Button>
+
+                {enableAudit && (
+                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                    <Link to="/monthly-audit">
+                      <ClipboardCheck className="size-4" />
+                      <span>{lang === "ar" ? "الجرد الشهري" : "Monthly Audit"}</span>
+                    </Link>
+                  </Button>
+                )}
+
+                {enableWaste && (
+                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                    <Link to="/waste-prevention">
+                      <ShieldAlert className="size-4 text-amber-300" />
+                      <span>{lang === "ar" ? "منع الهالك" : "Waste Prevention"}</span>
+                    </Link>
+                  </Button>
+                )}
                 <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
                   <Link to="/notifications" className="relative">
                     <div className="relative inline-flex items-center">

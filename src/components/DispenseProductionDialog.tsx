@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
+import { useSettings, DEFAULT_PRODUCTION_LINES } from "@/hooks/use-settings";
 import { useRegisterBackModal } from "@/lib/modal-stack";
 import { daysUntil } from "@/lib/status";
 import { countdownText } from "@/lib/format";
@@ -30,14 +31,6 @@ interface Props {
   onSelectAnotherItem?: (anotherItem: ItemRow) => void;
 }
 
-const PRODUCTION_LINES = [
-  "خط بسكويت ويفر (Wafer Line)",
-  "خط صب الشوكولاتة والبارات (Moulding Line)",
-  "خط الكريمات والحشوات (Creams & Fillings)",
-  "خط التعبئة والتغليف (Packaging Line)",
-  "معمل الجودة والتطوير (QC Lab / R&D)",
-];
-
 export function DispenseProductionDialog({
   open,
   onOpenChange,
@@ -49,8 +42,11 @@ export function DispenseProductionDialog({
   useRegisterBackModal(open, () => onOpenChange(false), "dispense-production-modal");
   const { t, lang } = useI18n();
   const { user } = useAuth();
+  const settings = useSettings();
 
-  const [selectedLine, setSelectedLine] = useState(PRODUCTION_LINES[0]);
+  const productionLines = settings.data?.production_lines ?? DEFAULT_PRODUCTION_LINES;
+
+  const [selectedLine, setSelectedLine] = useState(productionLines[0] || "");
   const [customLine, setCustomLine] = useState("");
   const [dispenseQty, setDispenseQty] = useState<string>("");
   const [recipient, setRecipient] = useState<string>("");
@@ -68,10 +64,10 @@ export function DispenseProductionDialog({
       setDispenseQty("");
       setNotes("");
       setRecipient("");
-      setSelectedLine(PRODUCTION_LINES[0]);
+      setSelectedLine(productionLines[0] || "");
       setCustomLine("");
     }
-  }, [open, item?.id]);
+  }, [open, item?.id, productionLines]);
 
   // Intelligent FEFO check: is there another batch of the same material that expires sooner?
   const earlierBatch = useMemo(() => {
@@ -248,7 +244,7 @@ export function DispenseProductionDialog({
               <span>{t("productionLine")}</span>
             </Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {PRODUCTION_LINES.map((line) => {
+              {productionLines.map((line) => {
                 const isSelected = selectedLine === line && !customLine;
                 return (
                   <button

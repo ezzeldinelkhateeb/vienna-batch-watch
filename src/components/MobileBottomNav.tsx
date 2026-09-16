@@ -1,6 +1,7 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Package, Bell, Settings, Plus, QrCode, ClipboardCheck, ShieldAlert } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useSettings } from "@/hooks/use-settings";
 
 interface MobileBottomNavProps {
   onAddItem?: () => void;
@@ -9,6 +10,7 @@ interface MobileBottomNavProps {
 
 export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
   const { t, lang } = useI18n();
+  const settings = useSettings();
   const location = useLocation();
   const pathname = location.pathname;
 
@@ -17,6 +19,9 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
   const isWaste = pathname === "/waste-prevention";
   const isNotifications = pathname === "/notifications";
   const isSettings = pathname === "/settings";
+
+  const enableAudit = settings.data?.feature_flags.enable_monthly_audit !== false;
+  const enableWaste = settings.data?.feature_flags.enable_waste_prevention !== false;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-card/95 backdrop-blur-xl md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
@@ -39,38 +44,42 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
         </Link>
 
         {/* Monthly Audit Tab */}
-        <Link
-          to="/monthly-audit"
-          className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
-            isAudit ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <div
-            className={`flex size-8 items-center justify-center rounded-full transition-all ${
-              isAudit ? "bg-brand/15 text-brand scale-110" : ""
+        {enableAudit && (
+          <Link
+            to="/monthly-audit"
+            className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
+              isAudit ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <ClipboardCheck className="size-4" />
-          </div>
-          <span className="text-[10px] leading-none">{lang === "ar" ? "الجرد" : "Audit"}</span>
-        </Link>
+            <div
+              className={`flex size-8 items-center justify-center rounded-full transition-all ${
+                isAudit ? "bg-brand/15 text-brand scale-110" : ""
+              }`}
+            >
+              <ClipboardCheck className="size-4" />
+            </div>
+            <span className="text-[10px] leading-none">{lang === "ar" ? "الجرد" : "Audit"}</span>
+          </Link>
+        )}
 
         {/* Waste Prevention Tab */}
-        <Link
-          to="/waste-prevention"
-          className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
-            isWaste ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <div
-            className={`flex size-8 items-center justify-center rounded-full transition-all ${
-              isWaste ? "bg-brand/15 text-brand scale-110" : ""
+        {enableWaste && (
+          <Link
+            to="/waste-prevention"
+            className={`flex flex-col items-center justify-center gap-1 px-2 py-1 transition-colors ${
+              isWaste ? "text-brand font-semibold" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <ShieldAlert className="size-4" />
-          </div>
-          <span className="text-[10px] leading-none">{lang === "ar" ? "الهالك" : "Waste"}</span>
-        </Link>
+            <div
+              className={`flex size-8 items-center justify-center rounded-full transition-all ${
+                isWaste ? "bg-brand/15 text-brand scale-110" : ""
+              }`}
+            >
+              <ShieldAlert className="size-4" />
+            </div>
+            <span className="text-[10px] leading-none">{lang === "ar" ? "الهالك" : "Waste"}</span>
+          </Link>
+        )}
 
         {/* Scan Barcode Button */}
         {onScan ? (

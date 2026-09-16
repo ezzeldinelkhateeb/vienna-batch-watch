@@ -55,6 +55,7 @@ import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { DispenseProductionDialog } from "@/components/DispenseProductionDialog";
 import { StockMovementHistoryDialog } from "@/components/StockMovementHistoryDialog";
+import { CustomActionButtonsBar } from "@/components/CustomActionButtonsBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,11 @@ function InventoryPage() {
   const queryClient = useQueryClient();
   const settings = useSettings();
   const thresholds = settings.data?.thresholds;
+
+  const enableKpis = settings.data?.feature_flags.enable_kpis !== false;
+  const enableDispense = settings.data?.feature_flags.enable_dispense !== false;
+  const enableScanner = settings.data?.feature_flags.enable_barcode_scanner !== false;
+  const canExport = isAdmin || settings.data?.feature_flags.allow_export_non_admin !== false;
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
@@ -216,13 +222,18 @@ function InventoryPage() {
   // Storage locations list
   const storageLocations = useMemo(() => {
     const set = new Set<string>();
+    for (const loc of settings.data?.storage_locations ?? []) {
+      if (loc?.trim()) {
+        set.add(loc.trim());
+      }
+    }
     for (const item of items.data ?? []) {
       if (item.storage_location?.trim()) {
         set.add(item.storage_location.trim());
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [items.data]);
+  }, [items.data, settings.data?.storage_locations]);
 
   const qcCounts = useMemo(() => {
     let quarantine = 0;
@@ -457,6 +468,9 @@ function InventoryPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
+        {/* Quick Action Buttons for Factory Staff */}
+        <CustomActionButtonsBar />
+
         {/* Urgent Expiry Alert Banner */}
         {hasUrgent && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-950 dark:text-red-200 shadow-sm">
@@ -492,22 +506,24 @@ function InventoryPage() {
         )}
 
         {/* Top Stock & Inventory KPI Overview */}
-        <InventoryKpiOverview
-          uniqueMaterials={kpis.uniqueMaterials}
-          totalBatches={kpis.totalBatches}
-          totalStockDisplay={kpis.totalStockDisplay}
-          criticalExpired={kpis.criticalExpired}
-          multiBatchCount={kpis.multiBatchCount}
-          approvedReady={kpis.approvedReady}
-          hasActiveFilters={hasActiveFilters}
-          isUrgentActive={statusFilter === "critical" || statusFilter === "expired"}
-          isMultiBatchActive={multiBatchOnly}
-          isApprovedActive={qcFilter === "approved"}
-          onFilterReset={resetAllFilters}
-          onFilterUrgent={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
-          onFilterMultiBatch={() => setMultiBatchOnly((prev) => !prev)}
-          onFilterApproved={() => setQcFilter(qcFilter === "approved" ? "all" : "approved")}
-        />
+        {enableKpis && (
+          <InventoryKpiOverview
+            uniqueMaterials={kpis.uniqueMaterials}
+            totalBatches={kpis.totalBatches}
+            totalStockDisplay={kpis.totalStockDisplay}
+            criticalExpired={kpis.criticalExpired}
+            multiBatchCount={kpis.multiBatchCount}
+            approvedReady={kpis.approvedReady}
+            hasActiveFilters={hasActiveFilters}
+            isUrgentActive={statusFilter === "critical" || statusFilter === "expired"}
+            isMultiBatchActive={multiBatchOnly}
+            isApprovedActive={qcFilter === "approved"}
+            onFilterReset={resetAllFilters}
+            onFilterUrgent={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
+            onFilterMultiBatch={() => setMultiBatchOnly((prev) => !prev)}
+            onFilterApproved={() => setQcFilter(qcFilter === "approved" ? "all" : "approved")}
+          />
+        )}
 
         {/* Expiry Status Metric Cards */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
@@ -670,15 +686,17 @@ function InventoryPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 text-xs"
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title={t("scanBarcode")}
-                onClick={() => setScannerOpen(true)}
-              >
-                <QrCode className="size-4 text-brand" />
-              </Button>
+              {enableScanner && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title={t("scanBarcode")}
+                  onClick={() => setScannerOpen(true)}
+                >
+                  <QrCode className="size-4 text-brand" />
+                </Button>
+              )}
             </div>
 
             {/* Sort & Grouping Mode Selector */}
@@ -778,10 +796,12 @@ function InventoryPage() {
               <span className="hidden lg:inline">{t("printQcReport")}</span>
             </Button>
 
-            <Button variant="outline" size="sm" onClick={exportCsv} className="h-8 gap-1.5 text-xs">
-              <Download className="size-3.5" />
-              <span className="hidden sm:inline">{t("exportCsv")}</span>
-            </Button>
+            {canExport && (
+              <Button variant="outline" size="sm" onClick={exportCsv} className="h-8 gap-1.5 text-xs">
+                <Download className="size-3.5" />
+                <span className="hidden sm:inline">{t("exportCsv")}</span>
+              </Button>
+            )}
 
             <Button variant="outline" size="sm" onClick={() => setBackupOpen(true)} className="h-8 gap-1.5 text-xs">
               <Archive className="size-3.5" />
@@ -965,7 +985,7 @@ function InventoryPage() {
                           </Button>
                         )}
 
-                        {canEditItems && (
+                        {canEditItems && enableDispense && (
                           <Button
                             size="sm"
                             variant="default"
@@ -1182,7 +1202,7 @@ function InventoryPage() {
                                 <ShieldCheck className="size-4" />
                               </Button>
                             )}
-                            {canEditItems && (
+                            {canEditItems && enableDispense && (
                               <Button
                                 size="icon"
                                 variant="ghost"

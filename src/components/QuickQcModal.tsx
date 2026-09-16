@@ -3,6 +3,7 @@ import { Check, ShieldCheck, AlertTriangle, XCircle, Clock, Sparkles, Building2,
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useSettings, DEFAULT_STORAGE_LOCATIONS } from "@/hooks/use-settings";
 import { useRegisterBackModal } from "@/lib/modal-stack";
 import { type ItemRow, type QcStatus } from "@/components/ItemFormDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -18,18 +19,12 @@ interface Props {
   onSaved: () => void;
 }
 
-const STORAGE_PRESETS = [
-  "ثلاجة الشوكولاتة 18°C (Chocolate Cool Store)",
-  "مخزن الدقيق والنواشف 72% (Flour Warehouse)",
-  "صومعة السكر والنشا (Sugar Silo)",
-  "مستودع المنكهات والدهون النباتية (Fats & Flavors)",
-  "غرفة مواد التعبئة والتغليف (Packaging Store)",
-  "منطقة الحجر المؤقت (Quarantine Bay)",
-];
-
 export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
   useRegisterBackModal(open, () => onOpenChange(false), "quick-qc-modal");
   const { t, lang } = useI18n();
+  const settings = useSettings();
+  const storagePresets = settings.data?.storage_locations ?? DEFAULT_STORAGE_LOCATIONS;
+
   const [qcStatus, setQcStatus] = useState<QcStatus>("quarantine");
   const [storageLocation, setStorageLocation] = useState("");
   const [coaNumber, setCoaNumber] = useState("");
@@ -402,7 +397,7 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
             />
             {/* Quick Storage Chips */}
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {STORAGE_PRESETS.map((preset) => {
+              {storagePresets.map((preset) => {
                 const isSelected = storageLocation.includes(preset.split(" ")[0]);
                 return (
                   <button
