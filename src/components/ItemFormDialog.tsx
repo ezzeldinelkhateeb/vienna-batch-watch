@@ -108,7 +108,7 @@ export function ItemFormDialog({
   item: ItemRow | null;
   onSaved: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [form, setForm] = useState<FormState>(empty);
   const [busy, setBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);

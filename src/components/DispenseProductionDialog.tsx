@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings, DEFAULT_PRODUCTION_LINES } from "@/hooks/use-settings";
+import { logActivity } from "@/lib/activity-logger";
 import { useRegisterBackModal } from "@/lib/modal-stack";
 import { daysUntil } from "@/lib/status";
 import { countdownText } from "@/lib/format";
@@ -149,6 +150,20 @@ export function DispenseProductionDialog({
           ? `تم صرف ${numDispenseQty} ${item.unit || "كجم"} لـ ${activeLine} بنجاح`
           : `Dispensed ${numDispenseQty} ${item.unit || "kg"} to ${activeLine} successfully`,
       );
+
+      void logActivity({
+        action_type: "stock_dispense",
+        entity_id: item.id,
+        entity_name: `${item.name} (${item.batch_number || "No Batch"})`,
+        details: {
+          dispensed_qty: numDispenseQty,
+          remaining_qty: remainingQty,
+          unit: item.unit || "كجم",
+          production_line: activeLine,
+          recipient: recipient.trim() || null,
+          notes: notes.trim() || null,
+        },
+      });
 
       onDispensed();
       onOpenChange(false);

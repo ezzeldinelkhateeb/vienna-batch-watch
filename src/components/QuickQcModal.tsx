@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { Check, ShieldCheck, AlertTriangle, XCircle, Clock, Sparkles, Building2, FileText, MapPin } from "lucide-react";
+import { Check, ShieldCheck, AlertTriangle, XCircle, Clock, Sparkles, Building2, FileText, MapPin, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useSettings, DEFAULT_STORAGE_LOCATIONS } from "@/hooks/use-settings";
+import { logActivity } from "@/lib/activity-logger";
 import { useRegisterBackModal } from "@/lib/modal-stack";
 import { type ItemRow, type QcStatus } from "@/components/ItemFormDialog";
+import { BatchLabelPrintModal } from "@/components/BatchLabelPrintModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,7 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
   const [coaNumber, setCoaNumber] = useState("");
   const [qcNotes, setQcNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [labelPrintOpen, setLabelPrintOpen] = useState(false);
 
   // Confectionery Checklist toggles state
   const [checks, setChecks] = useState({
@@ -64,22 +67,14 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
   const toggleCheck = (key: keyof typeof checks, tag: string) => {
     setChecks((prev) => {
       const next = !prev[key];
-      const updated = { ...prev, [key]: next };
-
-      // Update qcNotes text to reflect checklist
-      let currentNotes = qcNotes;
-      if (next) {
-        if (!currentNotes.includes(tag)) {
-          currentNotes = currentNotes ? `${currentNotes}\n${tag}` : tag;
+      setQcNotes((old) => {
+        if (next) {
+          return old.includes(tag) ? old : `${old}\n${tag}`.trim();
+        } else {
+          return old.replace(tag, "").trim();
         }
-      } else {
-        currentNotes = currentNotes
-          .replace(tag, "")
-          .replace(/\n\n+/g, "\n")
-          .trim();
-      }
-      setQcNotes(currentNotes);
-      return updated;
+      });
+      return { ...prev, [key]: next };
     });
   };
 
@@ -100,6 +95,18 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
         .eq("id", item.id);
 
       if (error) throw error;
+
+      void logActivity({
+        action_type: "qc_status_change",
+        entity_id: item.id,
+        entity_name: `${item.name} (${item.batch_number || "No Batch"})`,
+        details: {
+          old_status: item.qc_status,
+          new_status: finalStatus,
+          storage_location: storageLocation.trim() || null,
+          coa_number: coaNumber.trim() || null,
+        },
+      });
 
       toast.success(t("qcDecisionUpdated"));
       onSaved();
@@ -456,6 +463,17 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
             <span>{t("quickRelease")}</span>
           </Button>
 
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto border-brand/40 text-cocoa hover:bg-brand/10 gap-1.5 font-semibold shadow-xs"
+            onClick={() => setLabelPrintOpen(true)}
+            disabled={saving}
+          >
+            <Tag className="size-4 text-brand" />
+            <span>{lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Label 🏷️"}</span>
+          </Button>
+
           <div className="flex w-full sm:w-auto items-center gap-2 sm:ms-auto">
             <Button
               type="button"
@@ -477,6 +495,12 @@ export function QuickQcModal({ open, onOpenChange, item, onSaved }: Props) {
           </div>
         </DialogFooter>
       </DialogContent>
+
+      <BatchLabelPrintModal
+        open={labelPrintOpen}
+        onOpenChange={setLabelPrintOpen}
+        item={item}
+      />
     </Dialog>
   );
 }

@@ -25,10 +25,13 @@ import {
   RotateCcw,
   Eye,
   AlertCircle,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { logActivity } from "@/lib/activity-logger";
+import { AdminActivityLog } from "@/components/AdminActivityLog";
 import {
   useSettings,
   settingsQueryKey,
@@ -82,7 +85,7 @@ const AVAILABLE_COLORS = [
   { id: "blue", label: "أزرق ملكي (Blue)", bg: "bg-blue-600 text-white" },
 ];
 
-type HubTab = "buttons" | "lines" | "locations" | "features" | "branding";
+type HubTab = "buttons" | "lines" | "locations" | "features" | "branding" | "logs";
 
 export function AdminControlHub() {
   const { lang } = useI18n();
@@ -132,6 +135,12 @@ export function AdminControlHub() {
         .eq("id", true);
 
       if (error) throw error;
+
+      await logActivity({
+        action_type: "settings_update",
+        entity_name: "إعدادات المصنع ولوحة التحكم",
+        details: updatedFields,
+      });
 
       await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
       toast.success(
@@ -410,6 +419,19 @@ export function AdminControlHub() {
         >
           <Building2 className="size-4" />
           <span>{lang === "ar" ? "هوية المصنع والشعار" : "Factory Branding"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("logs")}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === "logs"
+              ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <History className="size-4" />
+          <span>{lang === "ar" ? "سجل تدقيق الأنشطة" : "Audit Trail"}</span>
         </button>
       </div>
 
@@ -918,6 +940,9 @@ export function AdminControlHub() {
           </div>
         </div>
       )}
+
+      {/* Tab 6: System Audit Activity Log */}
+      {activeTab === "logs" && <AdminActivityLog />}
 
       {/* Button Create/Edit Dialog */}
       <Dialog open={buttonModalOpen} onOpenChange={setButtonModalOpen}>
