@@ -13,6 +13,7 @@ import {
   parsePhotos,
   serializePhotos,
 } from "@/lib/photos";
+import { logActivity } from "@/lib/activity-logger";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { ProductImageViewerDialog } from "@/components/ProductImageViewerDialog";
 import { CameraCaptureModal } from "@/components/CameraCaptureModal";
@@ -323,6 +324,20 @@ export function ItemFormDialog({
           .eq("id", item.id);
         if (error) throw error;
 
+        void logActivity({
+          action_type: "item_update",
+          entity_id: item.id,
+          entity_name: `${payload.name} (${payload.batch_number || "No Batch"})`,
+          details: {
+            expiry_date: payload.expiry_date,
+            quantity: payload.quantity,
+            unit: payload.unit,
+            supplier: payload.supplier,
+            storage_location: payload.storage_location,
+            qc_status: payload.qc_status,
+          },
+        });
+
         // Clean up any deleted photos from storage
         if (item.photo_path) {
           const prevPhotos = parsePhotos(item.photo_path);
@@ -339,6 +354,19 @@ export function ItemFormDialog({
           .from("items")
           .insert({ ...payload, created_by: user.user?.id ?? null });
         if (error) throw error;
+
+        void logActivity({
+          action_type: "item_create",
+          entity_name: `${payload.name} (${payload.batch_number || "No Batch"})`,
+          details: {
+            expiry_date: payload.expiry_date,
+            quantity: payload.quantity,
+            unit: payload.unit,
+            supplier: payload.supplier,
+            storage_location: payload.storage_location,
+            qc_status: payload.qc_status,
+          },
+        });
       }
 
       toast.success(t("saved"));

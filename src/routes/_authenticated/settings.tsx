@@ -37,6 +37,7 @@ import { TeamManagement } from "@/components/TeamManagement";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { BackupRestoreManager } from "@/components/BackupRestoreManager";
 import { AdminControlHub } from "@/components/AdminControlHub";
+import { logActivity } from "@/lib/activity-logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -151,6 +152,11 @@ function SettingsPage() {
       if (error) throw error;
       setIsAppLocked(newVal);
       await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+      void logActivity({
+        action_type: "app_lock_toggle",
+        entity_name: newVal ? "قفل التطبيق المركزي" : "إلغاء قفل التطبيق المركزي",
+        details: { is_locked: newVal, message: lockMessage.trim() || null },
+      });
       toast.success(
         newVal
           ? (lang === "ar" ? "تم قفل التطبيق لجميع المستخدمين بنجاح 🔒" : "App locked for all users 🔒")
@@ -200,6 +206,11 @@ function SettingsPage() {
       }
       toast.success(t("saved"));
       void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+      void logActivity({
+        action_type: "settings_change",
+        entity_name: "إعدادات الإشعارات وتنبيهات الصلاحية",
+        details: { notify_channel: notifyChannel, has_whatsapp: Boolean(phone.trim()), has_telegram: Boolean(tgToken.trim()) },
+      });
     } catch (err: any) {
       const msg = err?.message || (err instanceof Error ? err.message : t("errGeneric"));
       toast.error(msg, { duration: 7000 });

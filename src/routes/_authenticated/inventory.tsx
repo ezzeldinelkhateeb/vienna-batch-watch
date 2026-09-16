@@ -28,6 +28,7 @@ import {
   X,
   Factory,
   History,
+  Tag,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
+import { logActivity } from "@/lib/activity-logger";
 import { signedPhotoUrls, extractAllPhotoPaths, parsePhotos } from "@/lib/photos";
 import { countdownText } from "@/lib/format";
 import { STATUS_ORDER, STATUS_TINT, daysUntil, statusFor, type Status } from "@/lib/status";
@@ -47,6 +49,7 @@ import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { QcPrintReportDialog } from "@/components/QcPrintReportDialog";
 import { BackupRestoreDialog } from "@/components/BackupRestoreDialog";
 import { InventoryKpiOverview } from "@/components/InventoryKpiOverview";
+import { BatchLabelPrintModal } from "@/components/BatchLabelPrintModal";
 import {
   ProductImageViewerDialog,
   type ProductImageDetails,
@@ -138,6 +141,7 @@ function InventoryPage() {
   const [backupOpen, setBackupOpen] = useState(false);
   const [dispenseItem, setDispenseItem] = useState<ItemRow | null>(null);
   const [movementsItem, setMovementsItem] = useState<ItemRow | null | "all">(null);
+  const [printLabelItem, setPrintLabelItem] = useState<ItemRow | null>(null);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
     setViewMode(mode);
@@ -166,11 +170,22 @@ function InventoryPage() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("items").delete().eq("id", id);
+    mutationFn: async (itemToDelete: ItemRow) => {
+      const { error } = await supabase.from("items").delete().eq("id", itemToDelete.id);
       if (error) throw error;
+      return itemToDelete;
     },
-    onSuccess: () => {
+    onSuccess: (deletedItem) => {
+      void logActivity({
+        action_type: "item_delete",
+        entity_id: deletedItem.id,
+        entity_name: `${deletedItem.name} (${deletedItem.batch_number || "No Batch"})`,
+        details: {
+          quantity: deletedItem.quantity,
+          unit: deletedItem.unit,
+          expiry_date: deletedItem.expiry_date,
+        },
+      });
       toast.success(t("saved"));
       void queryClient.invalidateQueries({ queryKey: ["items"] });
     },
@@ -1011,6 +1026,16 @@ function InventoryPage() {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="size-8 p-0 text-muted-foreground hover:text-brand"
+                          title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
+                          onClick={() => setPrintLabelItem(item)}
+                        >
+                          <Tag className="size-3.5" />
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
                           title={t("shareViaWhatsApp")}
                           onClick={() => shareItemOnWhatsApp(item)}
@@ -1042,7 +1067,7 @@ function InventoryPage() {
                             className="gap-1 text-xs text-destructive hover:text-destructive"
                             disabled={remove.isPending}
                             onClick={() => {
-                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item);
                             }}
                           >
                             <Trash2 className="size-3.5" />
@@ -1227,6 +1252,16 @@ function InventoryPage() {
                             <Button
                               size="icon"
                               variant="ghost"
+                              aria-label={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Label"}
+                              title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
+                              className="text-muted-foreground hover:text-brand"
+                              onClick={() => setPrintLabelItem(item)}
+                            >
+                              <Tag className="size-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
                               aria-label={t("shareViaWhatsApp")}
                               title={t("shareViaWhatsApp")}
                               className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
@@ -1255,7 +1290,7 @@ function InventoryPage() {
                                 disabled={remove.isPending}
                                 title={t("delete")}
                                 onClick={() => {
-                                  if (window.confirm(t("deleteConfirm"))) remove.mutate(item.id);
+                                  if (window.confirm(t("deleteConfirm"))) remove.mutate(item);
                                 }}
                               >
                                 <Trash2 className="size-4 text-destructive" />
@@ -1332,6 +1367,12 @@ function InventoryPage() {
         open={Boolean(movementsItem)}
         onOpenChange={(open) => !open && setMovementsItem(null)}
         item={movementsItem === "all" ? null : movementsItem}
+      />
+
+      <BatchLabelPrintModal
+        open={Boolean(printLabelItem)}
+        onOpenChange={(open) => !open && setPrintLabelItem(null)}
+        item={printLabelItem}
       />
 
       <MobileBottomNav
