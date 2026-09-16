@@ -346,8 +346,43 @@ export function MonthlyAuditPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
+        {/* Dedicated Print-Only Official Factory Header */}
+        <div className="hidden print:block mb-4 border-b-2 border-slate-900 pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-black text-slate-950">
+                {settings.data?.factory_name || "مصنع فيينا — Vienna Factory"}
+              </h1>
+              <p className="text-xs text-slate-700 font-semibold mt-0.5">
+                {settings.data?.system_tagline || "كشف الجرد والتدقيق الشهري لمطابقة الباتشات وتواريخ الصلاحية"}
+              </p>
+            </div>
+            <div className="text-end text-xs font-mono">
+              <p className="font-bold text-sm text-slate-950">
+                {lang === "ar" ? "شهر الجرد:" : "Audit Month:"} {formatMonthLabel(selectedMonth, lang)}
+              </p>
+              <p className="text-slate-600 mt-0.5">
+                {lang === "ar" ? "تاريخ الطباعة:" : "Printed on:"}{" "}
+                {new Date().toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between bg-slate-100 p-2 rounded text-xs font-mono border border-slate-300">
+            <span>إجمالي الباتشات: <strong>{kpis.total}</strong></span>
+            <span>تمت مراجعته: <strong>{kpis.reviewed}</strong> ({kpis.progress}%)</span>
+            <span>بانتظار المراجعة: <strong>{kpis.pending}</strong></span>
+            <span>شحنات جديدة: <strong>{kpis.newThisMonth}</strong></span>
+            <span>المُراجع: <strong>{user?.email || "فريق الجودة والمخازن"}</strong></span>
+          </div>
+        </div>
+
         {/* Page Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-brand shadow-xs">
               <ClipboardCheck className="size-6" />
@@ -398,7 +433,7 @@ export function MonthlyAuditPage() {
         </div>
 
         {/* Audit Progress & KPI Overview Cards */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 print:hidden">
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-xs">
             <p className="text-xs text-muted-foreground">{lang === "ar" ? "إجمالي الباتشات" : "Total Batches"}</p>
             <p className="text-2xl font-bold text-cocoa mt-1 font-mono">{kpis.total}</p>
@@ -450,7 +485,7 @@ export function MonthlyAuditPage() {
         </div>
 
         {/* Toolbar: Search, Filters & Bulk Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
             {/* Search Input */}
             <div className="relative w-full sm:w-72">
@@ -557,9 +592,9 @@ export function MonthlyAuditPage() {
           </div>
         </div>
 
-        {/* 1. Cards View (Best for Mobile) */}
-        {viewMode === "cards" ? (
-          <div className="space-y-3 print-content">
+        {/* 1. Cards View (Best for Mobile - hidden during print) */}
+        {viewMode === "cards" && (
+          <div className="space-y-3 print:hidden">
             {filteredRows.length === 0 ? (
               <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground text-xs">
                 {lang === "ar" ? "لا توجد نتائج تطابق خيارات البحث." : "No records matching filters."}
@@ -695,10 +730,15 @@ export function MonthlyAuditPage() {
               </div>
             )}
           </div>
-        ) : (
-          /* 2. Main Audit Table (with visible Production & Expiry Dates) */
-          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm print-content">
-            <table className="w-full min-w-[1000px] text-xs">
+        )}
+
+        {/* 2. Main Audit Table (Always used for Print, and on-screen when viewMode === 'table') */}
+        <div
+          className={`overflow-x-auto rounded-xl border bg-card shadow-sm print-content ${
+            viewMode === "table" ? "block" : "hidden print:block"
+          }`}
+        >
+          <table className="w-full min-w-[1000px] print:min-w-0 text-xs">
               <thead className="bg-muted/70 font-semibold text-cocoa">
                 <tr>
                   <th className="px-3 py-2.5 text-start w-12">#</th>
@@ -742,7 +782,7 @@ export function MonthlyAuditPage() {
                                 nextState: !isReviewed,
                               })
                             }
-                            className={`flex size-5 shrink-0 items-center justify-center rounded border transition-all cursor-pointer ${
+                            className={`flex size-5 shrink-0 items-center justify-center rounded border transition-all cursor-pointer print:hidden ${
                               isReviewed
                                 ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                                 : "border-border/80 bg-background hover:border-brand"
@@ -751,11 +791,16 @@ export function MonthlyAuditPage() {
                             {isReviewed && <CheckCheck className="size-3.5" />}
                           </button>
 
+                          {/* Print checkbox box */}
+                          <span className="hidden print:inline-flex w-4 h-4 border border-slate-700 rounded items-center justify-center text-[10px] font-bold">
+                            {isReviewed ? "✓" : ""}
+                          </span>
+
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
                               isReviewed
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 print:bg-transparent print:text-slate-900"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 print:bg-transparent print:text-slate-900"
                             }`}
                           >
                             {isReviewed
@@ -844,8 +889,26 @@ export function MonthlyAuditPage() {
                 )}
               </tbody>
             </table>
+
+            {/* Official Signatures Section for Print */}
+            <div className="hidden print:flex justify-between items-center mt-8 pt-4 border-t border-slate-300 text-xs text-slate-700 print-signatures-section">
+              <div className="text-center w-48">
+                <p className="font-bold">أمين / مسؤول المخزن</p>
+                <p className="text-[10px] text-muted-foreground mt-1">الاسم والتوقيع</p>
+                <div className="mt-10 border-b border-dotted border-slate-400 w-full" />
+              </div>
+              <div className="text-center w-48">
+                <p className="font-bold">مراقب الجودة (QC)</p>
+                <p className="text-[10px] text-muted-foreground mt-1">الاسم والتوقيع</p>
+                <div className="mt-10 border-b border-dotted border-slate-400 w-full" />
+              </div>
+              <div className="text-center w-48">
+                <p className="font-bold">مدير الإنتاج والمصنع</p>
+                <p className="text-[10px] text-muted-foreground mt-1">الاعتماد النهائي</p>
+                <div className="mt-10 border-b border-dotted border-slate-400 w-full" />
+              </div>
+            </div>
           </div>
-        )}
       </main>
 
       <MobileBottomNav />
