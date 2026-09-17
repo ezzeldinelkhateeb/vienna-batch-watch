@@ -226,17 +226,18 @@ function InventoryPage() {
   const materialGroupsMap = useMemo(() => {
     const map = new Map<string, { batches: ItemRow[]; totalQty: number; unit: string }>();
     for (const item of items.data ?? []) {
-      const key = item.name.trim().toLowerCase();
+      const key = (item.name || "").trim().toLowerCase();
+      if (!key) continue;
       const existing = map.get(key);
       if (existing) {
         existing.batches.push(item);
-        if (item.quantity != null && !isNaN(item.quantity)) {
-          existing.totalQty += item.quantity;
+        if (item.quantity != null && !isNaN(Number(item.quantity))) {
+          existing.totalQty += Number(item.quantity);
         }
       } else {
         map.set(key, {
           batches: [item],
-          totalQty: item.quantity ?? 0,
+          totalQty: item.quantity != null && !isNaN(Number(item.quantity)) ? Number(item.quantity) : 0,
           unit: item.unit ?? "",
         });
       }
@@ -280,11 +281,11 @@ function InventoryPage() {
   const kpis = useMemo(() => {
     const all = items.data ?? [];
     const totalBatches = all.length;
-    const uniqueMaterials = new Set(all.map((i) => i.name.trim().toLowerCase())).size;
+    const uniqueMaterials = new Set(all.map((i) => (i.name || "").trim().toLowerCase()).filter(Boolean)).size;
 
     let multiBatchCount = 0;
     for (const [, group] of materialGroupsMap) {
-      if (group.batches.length > 1) multiBatchCount++;
+      if ((group?.batches?.length ?? 0) > 1) multiBatchCount++;
     }
 
     const unitSums = new Map<string, number>();
@@ -342,7 +343,7 @@ function InventoryPage() {
     const list = (items.data ?? []).map((item) => {
       const days = daysUntil(item.expiry_date);
       const isFefoFirst = !!fefoPriorityMap.get(item.id);
-      const materialBatchCount = materialGroupsMap.get(item.name.trim().toLowerCase())?.batches.length ?? 1;
+      const materialBatchCount = materialGroupsMap.get((item.name || "").trim().toLowerCase())?.batches?.length ?? 1;
       return { item, days, status: statusFor(days, thresholds), isFefoFirst, materialBatchCount };
     });
 
@@ -901,12 +902,12 @@ function InventoryPage() {
                         <div>
                           <span className="font-bold text-sm text-cocoa dark:text-cream">{item.name}</span>
                           <span className="ms-2 rounded-full bg-brand/15 text-brand px-2 py-0.5 text-[11px] font-semibold">
-                            {t("similarBatchesCount", { count: groupStats.batches.length })}
+                            {t("similarBatchesCount", { count: groupStats?.batches?.length ?? 0 })}
                           </span>
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono">
-                        {t("totalGroupQuantity", { qty: `${groupStats.totalQty} ${groupStats.unit || ""}`.trim() })}
+                        {t("totalGroupQuantity", { qty: `${groupStats?.totalQty ?? 0} ${groupStats?.unit || ""}`.trim() })}
                       </div>
                     </div>
                   )}
@@ -1145,11 +1146,11 @@ function InventoryPage() {
                                 <Boxes className="size-4 text-brand" />
                                 <span className="font-bold text-sm text-cocoa dark:text-cream">{item.name}</span>
                                 <span className="rounded-full bg-brand/15 text-brand px-2 py-0.5 text-[11px] font-semibold">
-                                  {t("similarBatchesCount", { count: groupStats.batches.length })}
+                                  {t("similarBatchesCount", { count: groupStats?.batches?.length ?? 0 })}
                                 </span>
                               </div>
                               <div className="text-muted-foreground font-mono">
-                                {t("totalGroupQuantity", { qty: `${groupStats.totalQty} ${groupStats.unit || ""}`.trim() })}
+                                {t("totalGroupQuantity", { qty: `${groupStats?.totalQty ?? 0} ${groupStats?.unit || ""}`.trim() })}
                               </div>
                             </div>
                           </td>

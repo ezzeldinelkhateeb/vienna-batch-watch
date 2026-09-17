@@ -634,11 +634,11 @@ export function ItemFormDialog({
                 <div className="sm:col-span-2 text-center pt-0.5">
                   <button
                     type="button"
-                    onClick={() => systemCameraRef.current?.click()}
+                    onClick={() => setCameraModalOpen(true)}
                     className="inline-flex items-center gap-1.5 text-[11px] text-brand hover:underline font-medium"
                   >
                     <Smartphone className="size-3" />
-                    <span>{lang === "ar" ? "أو التقاط مباشر عبر كاميرا أندرويد الأصلية" : "Or capture with native Android camera"}</span>
+                    <span>{lang === "ar" ? "أو التقاط مباشر عبر الكاميرا مع المعاينة والتدوير" : "Or capture with camera preview & rotate"}</span>
                   </button>
                 </div>
               </div>
