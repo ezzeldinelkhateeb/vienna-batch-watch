@@ -2,11 +2,11 @@ import { useI18n } from "@/lib/i18n";
 import {
   Package,
   Layers,
-  Scale,
   AlertOctagon,
   Boxes,
   CheckCircle2,
   FlaskConical,
+  XCircle,
 } from "lucide-react";
 
 export interface InventoryKpiOverviewProps {
@@ -16,21 +16,24 @@ export interface InventoryKpiOverviewProps {
   multiBatchCount: number;
   approvedReady: number;
   quarantineCount: number;
-  totalWeightKg: number;
-  totalWeightTons: number;
-  weightBatchesCount: number;
-  unrecordedBatchesCount: number;
-  otherUnits?: { unit: string; quantity: number }[];
+  expiredCount?: number;
   hasActiveFilters: boolean;
   isUrgentActive: boolean;
+  isExpiredActive?: boolean;
   isMultiBatchActive: boolean;
   isApprovedActive: boolean;
   isQuarantineActive: boolean;
   onFilterReset: () => void;
   onFilterUrgent: () => void;
+  onFilterExpired?: () => void;
   onFilterMultiBatch: () => void;
   onFilterApproved: () => void;
   onFilterQuarantine: () => void;
+  totalWeightKg?: number;
+  totalWeightTons?: number;
+  weightBatchesCount?: number;
+  unrecordedBatchesCount?: number;
+  otherUnits?: { unit: string; quantity: number }[];
 }
 
 export function InventoryKpiOverview({
@@ -40,18 +43,16 @@ export function InventoryKpiOverview({
   multiBatchCount,
   approvedReady,
   quarantineCount,
-  totalWeightKg,
-  totalWeightTons,
-  weightBatchesCount,
-  unrecordedBatchesCount,
-  otherUnits = [],
+  expiredCount = 0,
   hasActiveFilters,
   isUrgentActive,
+  isExpiredActive = false,
   isMultiBatchActive,
   isApprovedActive,
   isQuarantineActive,
   onFilterReset,
   onFilterUrgent,
+  onFilterExpired,
   onFilterMultiBatch,
   onFilterApproved,
   onFilterQuarantine,
@@ -233,50 +234,83 @@ export function InventoryKpiOverview({
         </button>
       </div>
 
-      {/* 2. Compact Warehouse Stock Balance Bar (شريط رصيد المخزن المصغر) */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-amber-900/15 bg-card/90 px-3.5 py-2 shadow-2xs">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-            <Scale className="size-3.5" />
+      {/* 2. Expired Materials Box (بوكس المواد والتشغيلات المنتهية الصلاحية) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onFilterExpired}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onFilterExpired?.();
+          }
+        }}
+        className={`group flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-all cursor-pointer shadow-2xs ${
+          isExpiredActive
+            ? "border-red-600 ring-2 ring-red-400/80 bg-red-50 dark:bg-red-950/40"
+            : expiredCount > 0
+              ? "border-red-500/40 bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20 dark:hover:bg-red-950/30"
+              : "border-border/80 bg-card hover:bg-muted/40"
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+              expiredCount > 0
+                ? "bg-red-600 text-white shadow-xs"
+                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            }`}
+          >
+            {expiredCount > 0 ? (
+              <AlertOctagon className="size-4" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
           </div>
-          <div className="flex items-baseline gap-1.5 truncate">
+          <div className="flex flex-wrap items-baseline gap-2 min-w-0">
             <span className="text-xs font-bold text-foreground">
-              {lang === "ar" ? "رصيد المخزن الفعلي:" : "Stock Balance:"}
+              {lang === "ar" ? "المواد والتشغيلات المنتهية الصلاحية:" : "Expired Materials & Batches:"}
             </span>
-            <span className="text-sm font-black text-cocoa font-mono">
-              {totalWeightKg.toLocaleString("en-US")}
+            <span
+              className={`text-sm font-black font-mono ${
+                expiredCount > 0
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              {expiredCount.toLocaleString("en-US")} {lang === "ar" ? "تشغيلة" : "batches"}
             </span>
-            <span className="text-xs font-bold text-cocoa">
-              {lang === "ar" ? "كجم" : "kg"}
-            </span>
-            <span className="text-[11px] font-semibold text-muted-foreground font-mono">
-              ({totalWeightTons.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })} {lang === "ar" ? "طن" : "tons"})
+            <span className="text-[11px] text-muted-foreground font-medium truncate">
+              {expiredCount > 0
+                ? lang === "ar"
+                  ? "(يوجد خامات منتهية بالمخزن يجب عزلها — انقر للفلترة والعرض)"
+                  : "(Expired lots detected — click to filter and quarantine)"
+                : lang === "ar"
+                  ? "(المخزن سليم 100% وخالٍ من أي مواد منتهية)"
+                  : "(Warehouse is completely free of expired lots)"}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 ms-auto text-[11px]">
-          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-800 dark:text-emerald-300 font-mono">
-            <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
-            <span>
-              {weightBatchesCount} {lang === "ar" ? "تشغيلة موثقة" : "verified lots"}
+        <div className="flex items-center gap-1.5 ms-auto text-xs shrink-0">
+          {expiredCount > 0 ? (
+            <span
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                isExpiredActive
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "bg-red-500/15 text-red-700 dark:text-red-300 group-hover:bg-red-600 group-hover:text-white"
+              }`}
+            >
+              {isExpiredActive
+                ? lang === "ar" ? "الفلتر مفعّل" : "Filter Active"
+                : lang === "ar" ? "عرض المنتهي الآن 🚨" : "View Expired Now"}
             </span>
-          </span>
-
-          {unrecordedBatchesCount > 0 && (
-            <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground font-semibold font-mono">
-              {unrecordedBatchesCount} {lang === "ar" ? "قيد الجرد" : "pending"}
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+              <span>{lang === "ar" ? "صفر هدر بالمخزن" : "Zero Waste"}</span>
             </span>
           )}
-
-          {otherUnits.map((ou) => (
-            <span
-              key={ou.unit}
-              className="rounded-md bg-blue-500/10 px-2 py-0.5 text-blue-800 dark:text-blue-300 font-semibold font-mono"
-            >
-              {ou.quantity.toLocaleString("en-US")} {ou.unit}
-            </span>
-          ))}
         </div>
       </div>
     </div>

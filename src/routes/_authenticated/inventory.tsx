@@ -699,18 +699,16 @@ function InventoryPage() {
             multiBatchCount={kpis.multiBatchCount}
             approvedReady={kpis.approvedReady}
             quarantineCount={kpis.quarantineCount}
-            totalWeightKg={kpis.totalWeightKg}
-            totalWeightTons={kpis.totalWeightTons}
-            weightBatchesCount={kpis.weightBatchesCount}
-            unrecordedBatchesCount={kpis.unrecordedBatchesCount}
-            otherUnits={kpis.otherUnits}
+            expiredCount={counts.expired}
             hasActiveFilters={hasActiveFilters}
-            isUrgentActive={statusFilter === "urgent" || statusFilter === "critical" || statusFilter === "expired"}
+            isUrgentActive={statusFilter === "urgent" || statusFilter === "critical"}
+            isExpiredActive={statusFilter === "expired"}
             isMultiBatchActive={multiBatchOnly}
             isApprovedActive={qcFilter === "approved" && !fefoOnly}
             isQuarantineActive={qcFilter === "quarantine" && !fefoOnly}
             onFilterReset={resetAllFilters}
             onFilterUrgent={() => applyExclusiveFilter("status", "urgent")}
+            onFilterExpired={() => applyExclusiveFilter("status", "expired")}
             onFilterMultiBatch={() => applyExclusiveFilter("multiBatch")}
             onFilterApproved={() => applyExclusiveFilter("qc", "approved")}
             onFilterQuarantine={() => applyExclusiveFilter("qc", "quarantine")}
