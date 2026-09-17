@@ -24,11 +24,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
   const [shareWhatsApp, setShareWhatsApp] = useState(false);
   useRegisterBackModal(shareWhatsApp, () => setShareWhatsApp(false), "qc-print-whatsapp");
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const todayStr = new Date().toLocaleDateString(undefined, {
+  const todayStr = new Date().toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -93,6 +89,363 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
     ].join("\n");
   }, [items.length, approvedCount, quarantineCount, rejectedCount, criticalCount, todayStr]);
 
+  // Dedicated clean print window (bypasses background cards, mobile clutters, and text overlapping)
+  const handlePrint = () => {
+    const factoryName =
+      settings.data?.factory_name ||
+      (lang === "ar" ? "مصنع فينا للبسكوت والشيكولاتة" : "Vienna Biscuit & Chocolate Factory");
+    const tagline =
+      settings.data?.system_tagline ||
+      (lang === "ar"
+        ? "إدارة توكيد ومراقبة الجودة — فحص واعتماد خامات التشغيل وقاعدة الصرف بالصلاحية (FEFO)"
+        : "QA & QC Department — Raw Material Release & Confectionery FEFO Protocol");
+    const reportTitle = t("qcReportTitle");
+
+    const rowsHtml = sortedItems
+      .map((it, idx) => {
+        const days = daysUntil(it.expiry_date);
+        const isFefoFirst = fefoPriorityMap.get(it.id);
+        const st = it.qc_status ?? "quarantine";
+
+        let statusText = lang === "ar" ? "تحت الحجر" : "Quarantine";
+        let statusBg = "#fef3c7";
+        let statusColor = "#b45309";
+        let statusBorder = "#fde68a";
+
+        if (st === "approved") {
+          statusText = lang === "ar" ? "مقبول" : "Approved";
+          statusBg = "#dcfce7";
+          statusColor = "#15803d";
+          statusBorder = "#bbf7d0";
+        } else if (st === "rejected") {
+          statusText = lang === "ar" ? "مرفوض" : "Rejected";
+          statusBg = "#fee2e2";
+          statusColor = "#b91c1c";
+          statusBorder = "#fecaca";
+        }
+
+        const fefoBadge = isFefoFirst
+          ? `<span style="background:#fef3c7;color:#b45309;border:1px solid #fcd34d;padding:2px 5px;border-radius:4px;font-size:7pt;font-weight:bold;white-space:nowrap;">⭐ FEFO #1</span>`
+          : `<span style="color:#94a3b8;">—</span>`;
+
+        const countdown = countdownText(days, t);
+        const qty = it.quantity != null ? `${it.quantity} ${it.unit || ""}`.trim() : "—";
+        const rowBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+
+        return `<tr style="background:${rowBg};">
+          <td style="text-align:center;font-family:monospace;font-weight:600;width:24px;">${idx + 1}</td>
+          <td style="font-family:monospace;font-weight:600;color:#0f172a;width:68px;">${it.item_code || "—"}</td>
+          <td style="font-family:monospace;font-weight:700;color:#334155;width:78px;">${it.batch_number ? `#${it.batch_number}` : "—"}</td>
+          <td style="font-weight:700;color:#0f172a;width:130px;">${it.name}</td>
+          <td style="color:#475569;width:105px;">${it.supplier || "—"}</td>
+          <td style="text-align:center;width:65px;">
+            <span style="background:${statusBg};color:${statusColor};border:1px solid ${statusBorder};padding:2px 6px;border-radius:999px;font-size:7.5pt;font-weight:bold;white-space:nowrap;display:inline-block;">
+              ${statusText}
+            </span>
+          </td>
+          <td style="text-align:center;width:65px;">${fefoBadge}</td>
+          <td style="font-family:monospace;color:#64748b;text-align:center;width:70px;">${it.coa_number || "—"}</td>
+          <td style="color:#475569;width:85px;">${it.storage_location || "—"}</td>
+          <td style="white-space:nowrap;width:90px;">
+            <span style="font-family:monospace;font-weight:700;color:#dc2626;display:block;">${it.expiry_date}</span>
+            <span style="font-size:7pt;color:#64748b;display:block;">${countdown}</span>
+          </td>
+          <td style="font-family:monospace;font-weight:700;color:#0f172a;white-space:nowrap;width:55px;">${qty}</td>
+          <td style="color:#475569;font-size:7.5pt;width:125px;">${it.qc_notes || it.notes || "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="${lang === "ar" ? "ar" : "en"}" dir="${lang === "ar" ? "rtl" : "ltr"}">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${reportTitle} — ${todayStr}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    background:#ffffff !important;
+    color:#0f172a !important;
+    font-family:'Segoe UI',Arial,'Noto Sans Arabic',sans-serif;
+    font-size:8pt;
+    direction:${lang === "ar" ? "rtl" : "ltr"};
+    line-height:1.25;
+  }
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  .no-print {
+    background:#0f172a;
+    color:#ffffff;
+    padding:10px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    font-size:9.5pt;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+  }
+  .no-print button {
+    cursor:pointer;
+    font-weight:bold;
+    font-size:9pt;
+    padding:6px 14px;
+    border-radius:6px;
+    border:none;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .btn-print { background:#10b981; color:#ffffff; }
+  .btn-print:hover { background:#059669; }
+  .btn-close { background:#334155; color:#ffffff; }
+  .btn-close:hover { background:#475569; }
+  .sheet-container {
+    padding: 10px 14px;
+  }
+  .report-header {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding-bottom:8px;
+    border-bottom:2.5px solid #0f172a;
+    margin-bottom:10px;
+  }
+  .factory-title { font-size:15pt; font-weight:900; color:#0f172a; }
+  .factory-sub { font-size:8.5pt; font-weight:600; color:#475569; margin-top:2px; }
+  .doc-title { font-size:11pt; font-weight:800; color:#0f172a; margin-top:4px; }
+  .report-meta { text-align:${lang === "ar" ? "left" : "right"}; font-size:8.5pt; }
+  .report-meta strong { color:#0f172a; }
+
+  /* 4 KPI Cards Matching Image 1 */
+  .kpi-row {
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .kpi-card {
+    border-radius:8px;
+    padding:6px 10px;
+    text-align:center;
+    border:1.5px solid;
+  }
+  .kpi-quarantine { background:#fef9c3 !important; border-color:#facc15 !important; color:#854d0e !important; }
+  .kpi-approved { background:#dcfce7 !important; border-color:#4ade80 !important; color:#166534 !important; }
+  .kpi-rejected { background:#ffe4e6 !important; border-color:#fb7185 !important; color:#9f1239 !important; }
+  .kpi-critical { background:#fee2e2 !important; border-color:#f87171 !important; color:#991b1b !important; }
+  .kpi-label { font-size:8pt; font-weight:700; margin-bottom:2px; }
+  .kpi-val { font-size:15pt; font-weight:900; font-family:monospace; }
+
+  /* Main Table */
+  table {
+    width:100%;
+    border-collapse:collapse;
+    font-size:7.5pt;
+    table-layout:fixed;
+  }
+  thead { display: table-header-group !important; }
+  thead tr { background:#1e293b !important; color:#ffffff !important; }
+  th {
+    background:#1e293b !important;
+    color:#ffffff !important;
+    font-weight:700;
+    padding:5px 4px;
+    border:1px solid #334155;
+    font-size:7.5pt;
+    text-align:${lang === "ar" ? "right" : "left"};
+    white-space:nowrap;
+  }
+  td {
+    padding:4px 4px;
+    border:1px solid #cbd5e1;
+    font-size:7.5pt;
+    vertical-align:middle;
+    color:#0f172a !important;
+  }
+  tr { page-break-inside:avoid !important; break-inside:avoid !important; }
+
+  /* Signatures */
+  .signatures-section {
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    margin-top:16px;
+    padding-top:10px;
+    border-top:1.5px solid #cbd5e1;
+    page-break-inside:avoid !important;
+    break-inside:avoid !important;
+  }
+  .sig-card {
+    flex:1;
+    border:1px dashed #94a3b8;
+    border-radius:8px;
+    padding:8px;
+    text-align:center;
+  }
+  .sig-card p { font-weight:700; font-size:8.5pt; color:#0f172a; }
+  .sig-line {
+    margin:24px 8px 4px 8px;
+    border-bottom:1px dotted #94a3b8;
+  }
+  .sig-sub { font-size:7.5pt; color:#64748b; }
+  .footer-note {
+    text-align:center;
+    font-size:7.5pt;
+    color:#64748b;
+    margin-top:12px;
+    line-height:1.4;
+  }
+
+  @media print {
+    .no-print { display:none !important; }
+    .sheet-container { padding:0 !important; }
+    body { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  }
+</style>
+</head>
+<body>
+<div class="no-print">
+  <div>
+    <strong>${reportTitle}</strong>
+    <span style="opacity:0.8; margin-${lang === "ar" ? "right" : "left"}:8px;">— اضغط للطباعة أو الحفظ كملف PDF</span>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <button class="btn-print" onclick="window.focus(); window.print();">🖨️ طباعة / حفظ PDF</button>
+    <button class="btn-close" onclick="window.close();">✕ إغلاق</button>
+  </div>
+</div>
+
+<div class="sheet-container">
+  <div class="report-header">
+    <div>
+      <div class="factory-title">🏭 ${factoryName}</div>
+      <div class="factory-sub">${tagline}</div>
+      <div class="doc-title">${reportTitle}</div>
+    </div>
+    <div class="report-meta">
+      <p><strong>${t("reportDate")}:</strong> ${todayStr}</p>
+      <p><strong>${t("totalItems")}:</strong> ${items.length} ${t("item")}</p>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card kpi-quarantine">
+      <div class="kpi-label">${t("quarantine")}</div>
+      <div class="kpi-val">${quarantineCount}</div>
+    </div>
+    <div class="kpi-card kpi-approved">
+      <div class="kpi-label">${t("approved")}</div>
+      <div class="kpi-val">${approvedCount}</div>
+    </div>
+    <div class="kpi-card kpi-rejected">
+      <div class="kpi-label">${t("rejected")}</div>
+      <div class="kpi-val">${rejectedCount}</div>
+    </div>
+    <div class="kpi-card kpi-critical">
+      <div class="kpi-label">${t("statusCritical")}</div>
+      <div class="kpi-val">${criticalCount}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:24px; text-align:center;">#</th>
+        <th style="width:68px;">${t("itemCode")}</th>
+        <th style="width:78px;">${t("batchNumber")}</th>
+        <th style="width:130px;">${t("name")}</th>
+        <th style="width:105px;">${t("supplier")}</th>
+        <th style="width:65px; text-align:center;">${t("qcStatus")}</th>
+        <th style="width:65px; text-align:center;">FEFO</th>
+        <th style="width:70px; text-align:center;">${t("coaNumber")}</th>
+        <th style="width:85px;">${t("storageLocation")}</th>
+        <th style="width:90px;">${t("expiryDate")}</th>
+        <th style="width:55px;">${t("quantity")}</th>
+        <th style="width:125px;">${t("qcNotes")}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="signatures-section">
+    <div class="sig-card">
+      <p>${t("preparedBy")}</p>
+      <div class="sig-line"></div>
+      <div class="sig-sub">${t("signature")}</div>
+    </div>
+    <div class="sig-card">
+      <p>${t("inspectedBy")}</p>
+      <div class="sig-line"></div>
+      <div class="sig-sub">${t("signature")}</div>
+    </div>
+    <div class="sig-card">
+      <p>${t("approvedBy")}</p>
+      <div class="sig-line"></div>
+      <div class="sig-sub">${t("signature")}</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <p><strong>${factoryName} — نظام إدارة الجودة وسلامة الغذاء المعتمد</strong></p>
+    <p>Adhering to Good Manufacturing Practice (GMP) & FEFO Dispatch Policy</p>
+  </div>
+</div>
+
+<script>
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      try {
+        window.focus();
+        window.print();
+      } catch (e) {}
+    }, 250);
+  });
+</script>
+</body>
+</html>`;
+
+    // 1. Try dedicated print window
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      return;
+    }
+
+    // 2. Fallback for mobile popup blocker: hidden printable iframe
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 3000);
+      }, 350);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,9 +464,13 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
                 <MessageCircle className="size-4" />
                 <span>مشاركة عبر واتساب</span>
               </Button>
-              <Button onClick={handlePrint} size="sm" className="gap-1.5">
+              <Button
+                onClick={handlePrint}
+                size="sm"
+                className="gap-1.5 bg-brand hover:bg-brand/90 text-white font-bold text-xs"
+              >
                 <Printer className="size-4" />
-                {t("print")}
+                <span>{lang === "ar" ? "طباعة / حفظ PDF" : "Print / Save PDF"}</span>
               </Button>
             </div>
           </DialogHeader>
