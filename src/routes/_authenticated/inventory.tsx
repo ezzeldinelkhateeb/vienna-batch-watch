@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Download,
@@ -29,6 +29,9 @@ import {
   Factory,
   History,
   Tag,
+  ClipboardCheck,
+  Camera,
+  Zap,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -369,6 +372,51 @@ function InventoryPage() {
     };
   }, [items.data, materialGroupsMap, thresholds]);
 
+  // Next FEFO priority batch ready for dispensing to production
+  const nextFefoItem = useMemo(() => {
+    const approved = (items.data ?? []).filter(
+      (i) =>
+        i.qc_status === "approved" &&
+        daysUntil(i.expiry_date) >= 0 &&
+        (i.quantity == null || Number(i.quantity) > 0)
+    );
+    if (approved.length === 0) return null;
+    approved.sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
+    return approved[0] ?? null;
+  }, [items.data]);
+
+  // Current month string for monthly audit progress
+  const currentMonthStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }, []);
+
+  const monthlyReviewsQuery = useQuery({
+    queryKey: ["batch_monthly_reviews_summary", currentMonthStr],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("batch_monthly_reviews")
+        .select("item_id, is_reviewed")
+        .eq("month_year", currentMonthStr)
+        .eq("is_reviewed", true);
+      if (error) {
+        return [];
+      }
+      return data ?? [];
+    },
+  });
+
+  const reviewedBatchesCount = monthlyReviewsQuery.data?.length ?? 0;
+  const auditProgressPercent =
+    kpis.totalBatches > 0 ? Math.round((reviewedBatchesCount / kpis.totalBatches) * 100) : 0;
+
+  const photoVerifiedCount = useMemo(
+    () => (items.data ?? []).filter((i) => parsePhotos(i.photo_path).length > 0).length,
+    [items.data]
+  );
+
   const hasActiveFilters =
     search.trim() !== "" ||
     statusFilter !== "all" ||
@@ -627,6 +675,167 @@ function InventoryPage() {
             }}
           />
         )}
+
+        {/* Quality Statistics Bar & Next FEFO Action Banner */}
+        <div className="space-y-3">
+          {/* Quality Statistics Bar */}
+          <div className="rounded-xl border border-border/80 bg-card/80 p-2.5 sm:p-3 shadow-2xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-border/60">
+              {/* 1. Monthly Audit Progress */}
+              <Link
+                to="/monthly-audit"
+                className="group flex items-center justify-between gap-3 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                title="انقر للانتقال لشاشة الجرد والفحص الشهري"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand group-hover:bg-brand group-hover:text-white transition-colors">
+                    <ClipboardCheck className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      إنجاز الفحص الشهري
+                    </span>
+                    <span className="text-[11px] text-muted-foreground font-mono truncate block">
+                      {reviewedBatchesCount.toLocaleString("en-US")} من {kpis.totalBatches.toLocaleString("en-US")} تشغيلة
+                    </span>
+                  </div>
+                </div>
+                <div className="text-left font-mono shrink-0">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand">
+                    {auditProgressPercent}%
+                  </span>
+                </div>
+              </Link>
+
+              {/* 2. Rejection / Waste Rate */}
+              <button
+                type="button"
+                onClick={() => {
+                  setQcFilter(qcFilter === "rejected" ? "all" : "rejected");
+                  setFefoOnly(false);
+                }}
+                className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors text-right pt-2 sm:pt-1.5 ${
+                  qcFilter === "rejected" ? "ring-1 ring-destructive/40 bg-destructive/5" : ""
+                }`}
+                title="فلترة التشغيلات المرفوضة"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                    qcCounts.rejected === 0
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-destructive/10 text-destructive"
+                  }`}>
+                    <ShieldCheck className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      حالة الهدر والمرفوض
+                    </span>
+                    <span className="text-[11px] text-muted-foreground truncate block">
+                      {qcCounts.rejected === 0 ? "صفر هدر بالمخزن" : "يوجد تشغيلات مستبعدة"}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-left font-mono shrink-0">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    qcCounts.rejected === 0
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "bg-destructive/15 text-destructive"
+                  }`}>
+                    {qcCounts.rejected === 0 ? "0 مرفوض" : `${qcCounts.rejected.toLocaleString("en-US")} مرفوض`}
+                  </span>
+                </div>
+              </button>
+
+              {/* 3. Photo Documentation Audit */}
+              <div className="flex items-center justify-between gap-3 px-2 py-1.5 pt-2 sm:pt-1.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                    <Camera className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      التوثيق البصري للعينات
+                    </span>
+                    <span className="text-[11px] text-muted-foreground font-mono truncate block">
+                      {photoVerifiedCount.toLocaleString("en-US")} من {kpis.totalBatches.toLocaleString("en-US")} موثق
+                    </span>
+                  </div>
+                </div>
+                <div className="text-left font-mono shrink-0">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                    {kpis.totalBatches > 0 ? Math.round((photoVerifiedCount / kpis.totalBatches) * 100) : 0}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Next FEFO Priority Action Card */}
+          {nextFefoItem && (
+            <div className="relative overflow-hidden rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-brand/5 to-emerald-500/10 p-3 sm:p-3.5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/30">
+                    <Zap className="size-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:text-amber-200">
+                        ⚡ أولوية الصرف القادمة (FEFO)
+                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        تشغيلة #{nextFefoItem.batch_number || nextFefoItem.item_code || "—"}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                      <span className="font-bold text-sm text-foreground truncate">
+                        {nextFefoItem.name}
+                      </span>
+                      <span className="font-mono font-bold text-xs text-brand">
+                        {nextFefoItem.quantity != null
+                          ? `${Number(nextFefoItem.quantity).toLocaleString("en-US")} ${nextFefoItem.unit ?? ""}`.trim()
+                          : "—"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        • ينتهي: <span className="font-mono text-foreground font-semibold">{nextFefoItem.expiry_date}</span> ({countdownText(daysUntil(nextFefoItem.expiry_date), t)})
+                      </span>
+                      {nextFefoItem.storage_location && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          • 📍 {nextFefoItem.storage_location}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  {canEditItems && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-xs border-brand/40 bg-card hover:bg-muted text-foreground font-semibold shadow-2xs h-8"
+                      onClick={() => setQuickQcItem(nextFefoItem)}
+                    >
+                      <ShieldCheck className="size-3.5 text-brand" />
+                      <span>فحص</span>
+                    </Button>
+                  )}
+                  {canEditItems && enableDispense && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-2xs h-8 px-3"
+                      onClick={() => setDispenseItem(nextFefoItem)}
+                    >
+                      <Factory className="size-3.5" />
+                      <span>صرف للإنتاج الآن</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Expiry Status Quick Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
@@ -1086,7 +1295,7 @@ function InventoryPage() {
                             {t("quantity")}
                           </span>
                           <span className="font-bold font-mono text-foreground text-sm">
-                            {item.quantity != null ? `${item.quantity.toLocaleString()} ${item.unit ?? ""}` : "—"}
+                            {item.quantity != null ? `${Number(item.quantity).toLocaleString("en-US")} ${item.unit ?? ""}` : "—"}
                           </span>
                         </div>
                         <div className="pt-1.5 border-t border-border/50">
