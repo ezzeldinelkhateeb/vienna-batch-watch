@@ -70,36 +70,11 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
         </Link>
 
         <div className="flex items-center gap-1.5 sm:gap-2 ms-auto">
-          {/* 3-line Hamburger Menu Drawer Button */}
-          {showNav && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={openDrawer}
-              className="text-cream hover:bg-white/20 bg-white/10 border border-white/20 text-xs sm:text-sm font-bold gap-1.5 px-2.5 sm:px-3 shadow-xs"
-              title={lang === "ar" ? "قائمة أقسام الموقع الشاملة" : "All Sections Menu"}
-            >
-              <Menu className="size-5 stroke-[2.5]" />
-              <span className="hidden sm:inline">{lang === "ar" ? "الأقسام" : "Menu"}</span>
-            </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggle}
-            className="text-cream hover:bg-white/10 text-xs sm:text-sm font-medium"
-          >
-            <Languages className="size-4" />
-            <span className="hidden sm:inline">{t("language")}</span>
-          </Button>
-
           {showNav && (
             <>
               {/* Desktop Nav Items */}
               <div className="hidden md:flex items-center gap-1">
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
                   <Link to="/">
                     <Package className="size-4" />
                     <span>{t("inventory")}</span>
@@ -107,7 +82,7 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                 </Button>
 
                 {enableAudit && (
-                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
                     <Link to="/monthly-audit">
                       <ClipboardCheck className="size-4" />
                       <span>{lang === "ar" ? "الجرد الشهري" : "Monthly Audit"}</span>
@@ -116,14 +91,15 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                 )}
 
                 {enableWaste && (
-                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
                     <Link to="/waste-prevention">
                       <ShieldAlert className="size-4 text-amber-300" />
                       <span>{lang === "ar" ? "منع الهالك" : "Waste Prevention"}</span>
                     </Link>
                   </Button>
                 )}
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+
+                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
                   <Link to="/notifications" className="relative">
                     <div className="relative inline-flex items-center">
                       <Bell className="size-4" />
@@ -136,26 +112,66 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                     <span>{t("notificationsLog")}</span>
                   </Link>
                 </Button>
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10">
+
+                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
                   <Link to="/settings">
                     <SettingsIcon className="size-4" />
                     <span>{t("settings")}</span>
                   </Link>
                 </Button>
+
+                {/* Desktop More / Drawer Button */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={openDrawer}
+                  className="text-cream hover:bg-white/15 text-xs font-semibold gap-1.5 px-2.5"
+                  title={lang === "ar" ? "كافة الأقسام وأدوات الجودة" : "All Tools & Reports"}
+                >
+                  <Menu className="size-4" />
+                  <span>{lang === "ar" ? "المزيد" : "More"}</span>
+                </Button>
               </div>
 
-              {/* Sign Out */}
+              {/* Mobile 3-line Hamburger Menu Button */}
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
-                onClick={signOut}
-                className="text-cream/90 hover:bg-white/10 hover:text-white"
-                title={t("signOut")}
+                onClick={openDrawer}
+                className="flex md:hidden text-cream hover:bg-white/20 bg-white/10 border border-white/20 text-xs font-bold gap-1.5 px-2.5 shadow-xs"
+                title={lang === "ar" ? "قائمة أقسام الموقع" : "All Sections Menu"}
               >
-                <LogOut className="size-4" />
-                <span className="hidden sm:inline">{t("signOut")}</span>
+                <Menu className="size-5 stroke-[2.5]" />
+                <span>{lang === "ar" ? "القائمة" : "Menu"}</span>
               </Button>
             </>
+          )}
+
+          {/* Language Toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggle}
+            className="text-cream hover:bg-white/10 text-xs sm:text-sm font-medium px-2 sm:px-3"
+          >
+            <Languages className="size-4" />
+            <span className="hidden sm:inline">{t("language")}</span>
+          </Button>
+
+          {/* Sign Out (Desktop & General) */}
+          {showNav && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="text-cream/90 hover:bg-white/10 hover:text-white text-xs sm:text-sm"
+              title={t("signOut")}
+            >
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">{t("signOut")}</span>
+            </Button>
           )}
         </div>
       </div>

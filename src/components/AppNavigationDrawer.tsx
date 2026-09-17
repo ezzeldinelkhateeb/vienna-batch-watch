@@ -95,10 +95,10 @@ export function AppNavigationDrawer() {
     <Sheet open={isOpen} onOpenChange={(open) => !open && closeDrawer()}>
       <SheetContent
         side={isRtl ? "right" : "left"}
-        className="w-[85vw] sm:w-[380px] p-0 flex flex-col bg-card border-border/80 text-foreground overflow-hidden"
+        className="w-[86vw] max-w-[360px] p-0 flex flex-col bg-card border-border/80 text-foreground overflow-hidden shadow-2xl"
       >
         {/* Drawer Header with Factory Branding */}
-        <SheetHeader className="p-4 sm:p-5 brand-header text-start shrink-0 border-b border-white/10">
+        <SheetHeader className="p-4 sm:p-5 ltr:pe-12 rtl:ps-12 brand-header text-start shrink-0 border-b border-white/10 relative">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               {brandLogo ? (

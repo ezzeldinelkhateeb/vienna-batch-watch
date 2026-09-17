@@ -156,26 +156,6 @@ function InventoryPage() {
     }
   };
 
-  useEffect(() => {
-    const handleViennaAction = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail === "add-item") {
-        setEditing(null);
-        setDialogOpen(true);
-      } else if (detail === "scan") {
-        setScannerOpen(true);
-      } else if (detail === "print-report") {
-        setPrintOpen(true);
-      } else if (detail === "backup") {
-        setBackupOpen(true);
-      } else if (detail === "export-csv") {
-        exportCsv();
-      }
-    };
-    window.addEventListener("vienna:action", handleViennaAction);
-    return () => window.removeEventListener("vienna:action", handleViennaAction);
-  }, [rows]);
-
   const items = useQuery({
     queryKey: ["items"],
     queryFn: async () => {
@@ -505,6 +485,26 @@ function InventoryPage() {
   const shareItemOnWhatsApp = (item: ItemRow) => {
     setWhatsAppItem(item);
   };
+
+  useEffect(() => {
+    const handleViennaAction = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail === "add-item") {
+        setEditing(null);
+        setDialogOpen(true);
+      } else if (detail === "scan") {
+        setScannerOpen(true);
+      } else if (detail === "print-report") {
+        setPrintOpen(true);
+      } else if (detail === "backup") {
+        setBackupOpen(true);
+      } else if (detail === "export-csv") {
+        exportCsv();
+      }
+    };
+    window.addEventListener("vienna:action", handleViennaAction);
+    return () => window.removeEventListener("vienna:action", handleViennaAction);
+  }, [rows]);
 
   const hasUrgent = counts.expired > 0 || counts.critical > 0;
 

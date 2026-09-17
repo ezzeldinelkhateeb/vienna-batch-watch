@@ -31,7 +31,10 @@ import {
   X,
   Check,
   Loader2,
+  Radio,
 } from "lucide-react";
+
+import { AdminSecurityHub } from "@/components/AdminSecurityHub";
 
 const BRAND_ICON_PRESETS = [
   { icon: "🏭", label: "مصنع Factory" },
@@ -105,7 +108,7 @@ const AVAILABLE_COLORS = [
   { id: "blue", label: "أزرق ملكي (Blue)", bg: "bg-blue-600 text-white" },
 ];
 
-type HubTab = "branding" | "locations" | "lines" | "features" | "buttons" | "logs";
+type HubTab = "branding" | "security" | "locations" | "lines" | "features" | "buttons" | "logs";
 
 export function AdminControlHub() {
   const { lang } = useI18n();
@@ -456,6 +459,19 @@ export function AdminControlHub() {
         >
           <Building2 className="size-4" />
           <span>{lang === "ar" ? "هوية المصنع والشعار والأيقونة" : "Branding & Logo"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("security")}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === "security"
+              ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Radio className="size-4 text-emerald-600 animate-pulse" />
+          <span>{lang === "ar" ? "المستخدمون المتصلون والصيانة" : "Live Users & Security"}</span>
         </button>
 
         <button
@@ -1357,6 +1373,9 @@ export function AdminControlHub() {
           </div>
         </div>
       )}
+
+      {/* Tab: Live Connected Users, Device Monitoring & Maintenance */}
+      {activeTab === "security" && <AdminSecurityHub />}
 
       {/* Tab 6: System Audit Activity Log */}
       {activeTab === "logs" && <AdminActivityLog />}

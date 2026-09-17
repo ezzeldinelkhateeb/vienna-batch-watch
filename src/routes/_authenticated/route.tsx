@@ -6,6 +6,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { MaintenanceLockedScreen } from "@/components/MaintenanceLockedScreen";
 import { AppLockBanner } from "@/components/AppLockBanner";
 import { useAndroidBack } from "@/hooks/use-android-back";
+import { useActiveSessions } from "@/hooks/use-active-sessions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -30,6 +31,9 @@ function AuthenticatedLayout() {
   const { isAdmin } = useAuth();
   const settings = useSettings();
   const [adminBypassed, setAdminBypassed] = useState(false);
+
+  // Active sessions tracking and force logout listener
+  useActiveSessions();
 
   // Android Back button and gesture navigation stack handling
   useAndroidBack();
