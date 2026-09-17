@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-settings";
 import { MaintenanceLockedScreen } from "@/components/MaintenanceLockedScreen";
+import { SuspendedAccountScreen } from "@/components/SuspendedAccountScreen";
 import { AppLockBanner } from "@/components/AppLockBanner";
 import { useAndroidBack } from "@/hooks/use-android-back";
 import { useActiveSessions } from "@/hooks/use-active-sessions";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthenticatedLayout() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, isPrimaryAdmin, isSuspended } = useAuth();
   const settings = useSettings();
   const [adminBypassed, setAdminBypassed] = useState(false);
 
@@ -38,6 +39,13 @@ function AuthenticatedLayout() {
 
   // Android Back button and gesture navigation stack handling
   useAndroidBack();
+
+  // Track session login timestamp for revoked session verification
+  useEffect(() => {
+    if (typeof window !== "undefined" && !sessionStorage.getItem("vienna_login_time")) {
+      sessionStorage.setItem("vienna_login_time", String(Date.now()));
+    }
+  }, []);
 
   // Sync settings via Realtime channel
   useEffect(() => {
@@ -56,6 +64,32 @@ function AuthenticatedLayout() {
       void supabase.removeChannel(channel);
     };
   }, [settings]);
+
+  // Check persistent session revocation from database
+  useEffect(() => {
+    if (!user || isPrimaryAdmin) return;
+    const flags = settings.data?.feature_flags;
+    const revokedSessions = flags?.revoked_sessions;
+    if (revokedSessions && typeof revokedSessions === "object") {
+      const revokedAt = revokedSessions[user.id];
+      if (typeof revokedAt === "number") {
+        const loginTimeStr = sessionStorage.getItem("vienna_login_time");
+        const loginTime = loginTimeStr ? parseInt(loginTimeStr, 10) : 0;
+        if (revokedAt > loginTime) {
+          void supabase.auth.signOut().then(() => {
+            if (typeof window !== "undefined") {
+              window.location.href = "/auth";
+            }
+          });
+        }
+      }
+    }
+  }, [user, isPrimaryAdmin, settings.data?.feature_flags]);
+
+  // Intercept suspended state
+  if (isSuspended && !isPrimaryAdmin) {
+    return <SuspendedAccountScreen />;
+  }
 
   const isLocked = settings.data?.is_app_locked ?? false;
 

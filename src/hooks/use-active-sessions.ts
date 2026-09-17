@@ -136,7 +136,7 @@ function processPresenceState(presenceState: Record<string, any[]>, mySessionId:
 }
 
 export function useActiveSessions() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isPrimaryAdmin } = useAuth();
   const queryClient = useQueryClient();
   const mySessionId = getClientSessionId();
 
@@ -224,8 +224,8 @@ export function useActiveSessions() {
               if (!payload) return;
 
               const isTargetSession = payload.targetSessionId === mySessionId;
-              const isTargetUser = payload.targetUserId === user.id && !isAdmin;
-              const isKickAll = payload.kickAllOthers && mySessionId !== payload.initiatorSessionId && !isAdmin;
+              const isTargetUser = payload.targetUserId === user.id && !isPrimaryAdmin;
+              const isKickAll = payload.kickAllOthers && mySessionId !== payload.initiatorSessionId && !isPrimaryAdmin;
 
               if (isTargetSession || isTargetUser || isKickAll) {
                 toast.error("تم إنهاء جلستك وإخراجك من المنظومة بواسطة مسؤول النظام 🔒", {
@@ -343,6 +343,44 @@ export function useActiveSessions() {
     }
   };
 
+  // Admin Kick all sessions for a specific user ID
+  const kickUser = async (targetUserId: string, targetEmail?: string) => {
+    if (!isAdmin) {
+      toast.error("هذه الصلاحية متاحة للمسؤولين فقط");
+      return;
+    }
+    if (targetUserId === user?.id) {
+      toast.info("لا يمكنك إخراج حسابك الحالي من هنا. استخدم زر تسجيل الخروج");
+      return;
+    }
+
+    try {
+      const channel = singletonChannel || supabase.channel(PRESENCE_ROOM);
+      await channel.send({
+        type: "broadcast",
+        event: "FORCE_LOGOUT",
+        payload: {
+          targetUserId,
+          initiatorSessionId: mySessionId,
+          adminEmail: user?.email,
+        },
+      });
+
+      // Filter out target user from active sessions
+      globalSessions = globalSessions.filter((s) => s.userId !== targetUserId);
+      notifyListeners();
+
+      toast.success(
+        targetEmail
+          ? `تم إنهاء جلسة (${targetEmail}) وإخراجه بنجاح ✅`
+          : "تم إنهاء جلسة المستخدم وإخراجه بنجاح ✅",
+      );
+    } catch (err) {
+      console.error("Kick user error:", err);
+      toast.error("تعذر إرسال أمر إنهاء الجلسة");
+    }
+  };
+
   // Admin Kick all other non-admin sessions
   const kickAllOthers = async () => {
     if (!isAdmin) {
@@ -391,6 +429,7 @@ export function useActiveSessions() {
     sessions,
     activeCount,
     kickSession,
+    kickUser,
     kickAllOthers,
     broadcastAppLock,
     mySessionId,

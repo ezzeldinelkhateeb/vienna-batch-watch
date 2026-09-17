@@ -21,6 +21,12 @@ export interface FeatureFlags {
   enable_monthly_audit?: boolean;
   enable_barcode_scanner?: boolean;
   allow_export_non_admin?: boolean;
+  // Super Admin & Team Security Controls
+  primary_admin_email?: string;
+  primary_admin_id?: string;
+  suspended_user_ids?: string[];
+  revoked_sessions?: Record<string, number>; // userId -> timestamp ms
+  view_only_user_ids?: string[];
 }
 
 export const DEFAULT_PRODUCTION_LINES: string[] = [
@@ -40,6 +46,9 @@ export const DEFAULT_STORAGE_LOCATIONS: string[] = [
   "منطقة الحجر المؤقت (Quarantine Bay)",
 ];
 
+export const DEFAULT_PRIMARY_ADMIN_EMAIL = "midooda1995@gmail.com";
+export const DEFAULT_PRIMARY_ADMIN_ID = "1800a19c-c36a-4df0-9a34-d9b345f9c83e";
+
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   enable_kpis: true,
   enable_dispense: true,
@@ -47,6 +56,11 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   enable_monthly_audit: true,
   enable_barcode_scanner: true,
   allow_export_non_admin: true,
+  primary_admin_email: DEFAULT_PRIMARY_ADMIN_EMAIL,
+  primary_admin_id: DEFAULT_PRIMARY_ADMIN_ID,
+  suspended_user_ids: [],
+  revoked_sessions: {},
+  view_only_user_ids: [],
 };
 
 export interface AppSettings {
