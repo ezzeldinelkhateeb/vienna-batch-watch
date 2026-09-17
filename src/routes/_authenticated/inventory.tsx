@@ -58,7 +58,6 @@ import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { DispenseProductionDialog } from "@/components/DispenseProductionDialog";
 import { StockMovementHistoryDialog } from "@/components/StockMovementHistoryDialog";
-import { CustomActionButtonsBar } from "@/components/CustomActionButtonsBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -494,9 +493,6 @@ function InventoryPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
-        {/* Quick Action Buttons for Factory Staff */}
-        <CustomActionButtonsBar />
-
         {/* Urgent Expiry Alert Banner */}
         {hasUrgent && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-950 dark:text-red-200 shadow-sm">

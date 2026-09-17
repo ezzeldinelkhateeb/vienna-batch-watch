@@ -66,6 +66,8 @@ export interface AppSettings {
   feature_flags: FeatureFlags;
   factory_name: string;
   system_tagline: string;
+  app_logo_url: string | null;
+  app_icon: string;
 }
 
 export const settingsQueryKey = ["app_settings"];
@@ -96,6 +98,8 @@ export function useSettings() {
         feature_flags: DEFAULT_FEATURE_FLAGS,
         factory_name: "Vienna",
         system_tagline: "Factory Batch Watch & Expiry Guard",
+        app_logo_url: null,
+        app_icon: "🏭",
       };
 
       if (error || !data) {
@@ -132,6 +136,8 @@ export function useSettings() {
         },
         factory_name: (raw.factory_name && typeof raw.factory_name === "string") ? raw.factory_name : "Vienna",
         system_tagline: (raw.system_tagline && typeof raw.system_tagline === "string") ? raw.system_tagline : "Factory Batch Watch & Expiry Guard",
+        app_logo_url: raw.app_logo_url ?? null,
+        app_icon: (raw.app_icon && typeof raw.app_icon === "string") ? raw.app_icon : "🏭",
       };
     },
   });

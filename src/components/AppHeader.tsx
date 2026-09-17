@@ -39,16 +39,31 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
 
   const brandName = settings.data?.factory_name || "Vienna";
   const brandTagline = settings.data?.system_tagline || t("brandTagline");
+  const brandLogo = settings.data?.app_logo_url;
+  const brandIcon = settings.data?.app_icon || "🏭";
   const enableAudit = settings.data?.feature_flags.enable_monthly_audit !== false;
   const enableWaste = settings.data?.feature_flags.enable_waste_prevention !== false;
 
   return (
     <header className="brand-header">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
-        <Link to="/" className="block">
-          <span className="brand-script block text-[40px] sm:text-[44px]">{brandName}</span>
-          <span className="brand-tagline block">{brandTagline}</span>
-          <span className="mt-1 block text-[13px] text-cream/75">{t("systemSubtitle")}</span>
+        <Link to="/" className="flex items-center gap-3 group">
+          {brandLogo ? (
+            <img
+              src={brandLogo}
+              alt={brandName}
+              className="h-12 sm:h-14 w-auto max-w-[150px] sm:max-w-[190px] object-contain rounded-xl bg-white/15 p-1 border border-white/20 shadow-xs"
+            />
+          ) : (
+            <div className="flex size-11 sm:size-13 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-2xl sm:text-3xl border border-white/20 shadow-xs group-hover:scale-105 transition-transform">
+              <span>{brandIcon}</span>
+            </div>
+          )}
+          <div>
+            <span className="brand-script block text-[36px] sm:text-[42px] leading-none">{brandName}</span>
+            <span className="brand-tagline block mt-1">{brandTagline}</span>
+            <span className="mt-0.5 block text-[12px] text-cream/75">{t("systemSubtitle")}</span>
+          </div>
         </Link>
 
         <div className="flex items-center gap-1.5 sm:gap-2 ms-auto">

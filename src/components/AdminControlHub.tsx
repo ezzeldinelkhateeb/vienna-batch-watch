@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Sliders,
   Plus,
@@ -26,7 +26,27 @@ import {
   Eye,
   AlertCircle,
   History,
+  Image as ImageIcon,
+  Upload,
+  X,
+  Check,
+  Loader2,
 } from "lucide-react";
+
+const BRAND_ICON_PRESETS = [
+  { icon: "🏭", label: "مصنع Factory" },
+  { icon: "🍫", label: "شوكولاتة Chocolate" },
+  { icon: "🍪", label: "بسكويت Biscuit" },
+  { icon: "🛡️", label: "جودة وحماية QC Shield" },
+  { icon: "📦", label: "مخازن وطرود Warehouse" },
+  { icon: "🏷️", label: "تشغيلات Batches" },
+  { icon: "✨", label: "تميز ونقاء Premium" },
+  { icon: "👑", label: "تاج Royal" },
+  { icon: "🎯", label: "دقة الأداء Accuracy" },
+  { icon: "🔬", label: "مختبر وفحص Lab QC" },
+  { icon: "🧁", label: "حلويات Pastry" },
+  { icon: "🍬", label: "سكاكر Candy" },
+];
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -85,14 +105,14 @@ const AVAILABLE_COLORS = [
   { id: "blue", label: "أزرق ملكي (Blue)", bg: "bg-blue-600 text-white" },
 ];
 
-type HubTab = "buttons" | "lines" | "locations" | "features" | "branding" | "logs";
+type HubTab = "branding" | "locations" | "lines" | "features" | "buttons" | "logs";
 
 export function AdminControlHub() {
   const { lang } = useI18n();
   const settings = useSettings();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<HubTab>("buttons");
+  const [activeTab, setActiveTab] = useState<HubTab>("branding");
   const [saving, setSaving] = useState(false);
 
   // Custom Buttons State
@@ -107,6 +127,8 @@ export function AdminControlHub() {
   // Storage Locations State
   const [storageLocations, setStorageLocations] = useState<string[]>([]);
   const [newLocationName, setNewLocationName] = useState("");
+  const [editingLocationIndex, setEditingLocationIndex] = useState<number | null>(null);
+  const [editingLocationValue, setEditingLocationValue] = useState("");
 
   // Feature Flags State
   const [features, setFeatures] = useState<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
@@ -114,6 +136,10 @@ export function AdminControlHub() {
   // Branding State
   const [factoryName, setFactoryName] = useState("Vienna");
   const [systemTagline, setSystemTagline] = useState("Factory Batch Watch & Expiry Guard");
+  const [appLogoUrl, setAppLogoUrl] = useState<string | null>(null);
+  const [appIcon, setAppIcon] = useState<string>("🏭");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync with loaded settings
   useEffect(() => {
@@ -124,6 +150,8 @@ export function AdminControlHub() {
     setFeatures(settings.data.feature_flags ?? DEFAULT_FEATURE_FLAGS);
     setFactoryName(settings.data.factory_name || "Vienna");
     setSystemTagline(settings.data.system_tagline || "Factory Batch Watch & Expiry Guard");
+    setAppLogoUrl(settings.data.app_logo_url ?? null);
+    setAppIcon(settings.data.app_icon || "🏭");
   }, [settings.data]);
 
   const persistToDatabase = async (updatedFields: Record<string, any>, successMessage?: string) => {
@@ -298,6 +326,38 @@ export function AdminControlHub() {
     );
   };
 
+  const handleStartEditLocation = (index: number, currentName: string) => {
+    setEditingLocationIndex(index);
+    setEditingLocationValue(currentName);
+  };
+
+  const handleSaveEditLocation = async (index: number) => {
+    const val = editingLocationValue.trim();
+    if (!val) return;
+    const nextLocations = [...storageLocations];
+    nextLocations[index] = val;
+    setStorageLocations(nextLocations);
+    setEditingLocationIndex(null);
+    setEditingLocationValue("");
+    await persistToDatabase(
+      { storage_locations: nextLocations },
+      lang === "ar" ? "تم تعديل اسم موقع التخزين بنجاح" : "Location updated",
+    );
+  };
+
+  const handleAddPresetLocation = async (preset: string) => {
+    if (storageLocations.includes(preset)) {
+      toast.info(lang === "ar" ? "هذا الموقع مضاف بالفعل" : "Location already added");
+      return;
+    }
+    const nextLocations = [...storageLocations, preset];
+    setStorageLocations(nextLocations);
+    await persistToDatabase(
+      { storage_locations: nextLocations },
+      lang === "ar" ? `تمت إضافة "${preset}" بنجاح` : `Added "${preset}"`,
+    );
+  };
+
   // Feature flag handlers
   const handleToggleFeature = async (key: keyof FeatureFlags, val: boolean) => {
     const nextFeatures = { ...features, [key]: val };
@@ -308,14 +368,52 @@ export function AdminControlHub() {
     );
   };
 
-  // Branding save handler
+  // Logo file upload handler
+  const handleUploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error(lang === "ar" ? "يُرجى اختيار ملف صورة صالح (PNG, JPG, SVG)" : "Please select an image file");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const filePath = `branding/logo-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("item-photos")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage
+        .from("item-photos")
+        .getPublicUrl(filePath);
+
+      setAppLogoUrl(publicData.publicUrl);
+      toast.success(lang === "ar" ? "تم رفع صورة الشعار بنجاح! اضغط 'حفظ هوية المصنع' لاعتمادها" : "Logo uploaded! Click save to apply");
+    } catch (err: any) {
+      console.error("Logo upload error:", err);
+      toast.error(lang === "ar" ? "تعذر رفع صورة الشعار" : "Failed to upload logo image");
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  // Branding save handler (Name, Tagline, Logo, Icon)
   const handleSaveBranding = async () => {
     await persistToDatabase(
       {
         factory_name: factoryName.trim() || "Vienna",
         system_tagline: systemTagline.trim() || "Factory Batch Watch & Expiry Guard",
+        app_logo_url: appLogoUrl ? appLogoUrl.trim() : null,
+        app_icon: appIcon.trim() || "🏭",
       },
-      lang === "ar" ? "تم حفظ هوية وشعار المصنع" : "Branding updated successfully",
+      lang === "ar" ? "تم حفظ وتطبيق هوية وشعار المصنع بنجاح! ✅" : "Factory branding & logo updated! ✅",
     );
   };
 
@@ -349,17 +447,30 @@ export function AdminControlHub() {
       <div className="flex flex-wrap gap-1.5 rounded-xl border border-border/70 bg-muted/40 p-1.5 shadow-xs">
         <button
           type="button"
-          onClick={() => setActiveTab("buttons")}
+          onClick={() => setActiveTab("branding")}
           className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
-            activeTab === "buttons"
+            activeTab === "branding"
               ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <LinkIcon className="size-4" />
-          <span>{lang === "ar" ? "أزرار الفريق والمهام" : "Custom Buttons"}</span>
+          <Building2 className="size-4" />
+          <span>{lang === "ar" ? "هوية المصنع والشعار والأيقونة" : "Branding & Logo"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("locations")}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === "locations"
+              ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Warehouse className="size-4" />
+          <span>{lang === "ar" ? "أقسام ومستودعات المصنع" : "Departments & Locations"}</span>
           <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-mono">
-            {buttons.length}
+            {storageLocations.length}
           </span>
         </button>
 
@@ -373,25 +484,9 @@ export function AdminControlHub() {
           }`}
         >
           <Factory className="size-4" />
-          <span>{lang === "ar" ? "خطوط الإنتاج" : "Production Lines"}</span>
+          <span>{lang === "ar" ? "خطوط الإنتاج والتشغيل" : "Production Lines"}</span>
           <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-mono">
             {productionLines.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("locations")}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
-            activeTab === "locations"
-              ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Warehouse className="size-4" />
-          <span>{lang === "ar" ? "المستودعات والثلاجات" : "Storage Locations"}</span>
-          <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-mono">
-            {storageLocations.length}
           </span>
         </button>
 
@@ -410,15 +505,18 @@ export function AdminControlHub() {
 
         <button
           type="button"
-          onClick={() => setActiveTab("branding")}
+          onClick={() => setActiveTab("buttons")}
           className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-all ${
-            activeTab === "branding"
+            activeTab === "buttons"
               ? "bg-card text-brand shadow-xs ring-1 ring-border/50"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Building2 className="size-4" />
-          <span>{lang === "ar" ? "هوية المصنع والشعار" : "Factory Branding"}</span>
+          <LinkIcon className="size-4" />
+          <span>{lang === "ar" ? "أزرار ومهام الفريق" : "Quick Links"}</span>
+          <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-mono">
+            {buttons.length}
+          </span>
         </button>
 
         <button
@@ -676,19 +774,20 @@ export function AdminControlHub() {
         </div>
       )}
 
-      {/* Tab 3: Storage Locations Manager */}
+      {/* Tab 2: Storage Locations & Factory Departments Manager */}
       {activeTab === "locations" && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-foreground">
-                  {lang === "ar" ? "مستودعات وثلاجات التخزين" : "Factory Storage Locations & Cold Stores"}
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Warehouse className="size-4 text-brand" />
+                  <span>{lang === "ar" ? "أقسام ومستودعات المصنع وثلاجات التخزين" : "Factory Departments & Storage Locations"}</span>
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {lang === "ar"
-                    ? "تظهر هذه المواقع كخيارات سريعة في نموذج استلام الصنف ونافذة اعتماد الجودة والفلاتر."
-                    : "Locations appear in receipt forms, quick QC dialog, and inventory filters."}
+                    ? "أضف، عدّل، أو احذف أقسام المصنع ومواقع التخزين. تظهر هذه الأقسام تلقائياً في استلام الخامات، تقارير الجودة، وفلاتر المخزون."
+                    : "Manage factory departments and storage areas. Visible in item receipt, QC reports, and inventory filters."}
                 </p>
               </div>
               <Button
@@ -699,14 +798,43 @@ export function AdminControlHub() {
                 className="h-8 gap-1 text-xs text-muted-foreground shrink-0"
               >
                 <RotateCcw className="size-3.5" />
-                <span>{lang === "ar" ? "استعادة المستودعات الافتراضية" : "Reset Defaults"}</span>
+                <span>{lang === "ar" ? "استعادة الأقسام الافتراضية" : "Reset Defaults"}</span>
               </Button>
             </div>
 
-            {/* Add new location input */}
-            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            {/* Quick department preset pills */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1.5">
+                {lang === "ar" ? "إضافة سريعة لأقسام المصانع الغذائية الشائعة:" : "Quick food factory presets:"}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  lang === "ar" ? "مخزن المواد الخام الرئيسي" : "Main Raw Materials Store",
+                  lang === "ar" ? "ثلاجة الشوكولاتة 18°C" : "Chocolate Cool Room 18°C",
+                  lang === "ar" ? "عنبر إنتاج البسكويت والويفر" : "Wafer & Biscuit Area",
+                  lang === "ar" ? "مخزن مواد التعبئة والتغليف" : "Packaging Materials Store",
+                  lang === "ar" ? "مستودع المنكهات والزيوت النباتية" : "Oils & Flavors Warehouse",
+                  lang === "ar" ? "صومعة السكر والنشا 72%" : "Sugar & Starch Silo",
+                  lang === "ar" ? "منطقة الحجر والتجنيب المؤقت" : "Quarantine & QA Bay",
+                  lang === "ar" ? "معمل الجودة والتطوير (R&D)" : "QC Lab & Development",
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => void handleAddPresetLocation(preset)}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted hover:bg-brand/15 hover:text-brand border border-border/80 px-2.5 py-0.5 text-[11px] font-medium transition-colors cursor-pointer"
+                  >
+                    <Plus className="size-3" />
+                    <span>{preset}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Add custom location input */}
+            <div className="pt-2 flex flex-col sm:flex-row gap-2">
               <Input
-                placeholder={lang === "ar" ? "اسم المستودع أو الثلاجة (مثال: ثلاجة بودرة الكاكاو 16°C)..." : "New storage location name..."}
+                placeholder={lang === "ar" ? "أدخل اسم قسم أو مخزن جديد (مثال: صالة الخلط، مخزن الإضافات)..." : "New department or store location..."}
                 value={newLocationName}
                 onChange={(e) => setNewLocationName(e.target.value)}
                 onKeyDown={(e) => {
@@ -724,7 +852,7 @@ export function AdminControlHub() {
                 className="shrink-0 gap-1.5 bg-brand text-brand-foreground text-xs shadow-xs"
               >
                 <Plus className="size-4" />
-                <span>{lang === "ar" ? "إضافة الموقع" : "Add Location"}</span>
+                <span>{lang === "ar" ? "إضافة القسم" : "Add Department"}</span>
               </Button>
             </div>
           </div>
@@ -732,27 +860,83 @@ export function AdminControlHub() {
           <div className="divide-y divide-border/60 rounded-xl border border-border/80 bg-card shadow-xs overflow-hidden">
             {storageLocations.map((loc, idx) => (
               <div
-                key={loc}
+                key={`${loc}-${idx}`}
                 className="flex items-center justify-between gap-3 p-3 hover:bg-muted/30 transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex size-6 items-center justify-center rounded-md bg-muted text-[11px] font-mono font-bold text-muted-foreground">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-mono font-bold text-muted-foreground">
                     {idx + 1}
                   </span>
-                  <Warehouse className="size-4 text-brand" />
-                  <span className="text-xs sm:text-sm font-semibold text-foreground">{loc}</span>
+                  <Warehouse className="size-4 text-brand shrink-0" />
+                  {editingLocationIndex === idx ? (
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Input
+                        value={editingLocationValue}
+                        onChange={(e) => setEditingLocationValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void handleSaveEditLocation(idx);
+                          } else if (e.key === "Escape") {
+                            setEditingLocationIndex(null);
+                          }
+                        }}
+                        className="h-7 text-xs flex-1"
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => void handleSaveEditLocation(idx)}
+                        className="size-7 text-emerald-600 hover:bg-emerald-50"
+                        title={lang === "ar" ? "حفظ التعديل" : "Save"}
+                      >
+                        <Check className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setEditingLocationIndex(null)}
+                        className="size-7 text-muted-foreground hover:bg-muted"
+                        title={lang === "ar" ? "إلغاء" : "Cancel"}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs sm:text-sm font-semibold text-foreground truncate">
+                      {loc}
+                    </span>
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteLocation(loc)}
-                  disabled={saving}
-                  className="h-7 text-xs text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="size-3.5 me-1" />
-                  <span>{lang === "ar" ? "حذف" : "Remove"}</span>
-                </Button>
+                {editingLocationIndex !== idx && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleStartEditLocation(idx, loc)}
+                      disabled={saving}
+                      className="size-7 text-muted-foreground hover:text-brand hover:bg-brand/10"
+                      title={lang === "ar" ? "تعديل الاسم" : "Rename"}
+                    >
+                      <Edit2 className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteLocation(loc)}
+                      disabled={saving}
+                      className="size-7 text-destructive hover:bg-destructive/10"
+                      title={lang === "ar" ? "حذف القسم" : "Remove"}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -887,23 +1071,81 @@ export function AdminControlHub() {
 
       {/* Tab 5: Branding & Identity */}
       {activeTab === "branding" && (
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* Live Preview Header */}
+          <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Eye className="size-4 text-brand" />
+                <h3 className="text-xs sm:text-sm font-bold text-foreground">
+                  {lang === "ar" ? "معاينة حية لترويسة المنظومة" : "Live Header Preview"}
+                </h3>
+              </div>
+              <span className="text-[10px] sm:text-xs rounded-full bg-brand/10 text-brand px-2 py-0.5 font-medium">
+                {lang === "ar" ? "يتحدث تلقائياً مع التعديل" : "Live Preview"}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {lang === "ar"
+                ? "هكذا تظهر هوية مصنعك وشعارك أعلى شاشات التطبيق لجميع الفنيين والمديرين:"
+                : "This is how the application header will appear across all screens:"}
+            </p>
+
+            {/* Header Mockup */}
+            <div className="brand-header rounded-xl p-4 sm:p-5 border border-white/20 shadow-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {appLogoUrl ? (
+                    <img
+                      src={appLogoUrl}
+                      alt={factoryName}
+                      className="h-12 sm:h-14 w-auto max-w-[150px] sm:max-w-[190px] object-contain rounded-xl bg-white/15 p-1 border border-white/20 shadow-xs"
+                    />
+                  ) : (
+                    <div className="flex size-11 sm:size-13 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-2xl sm:text-3xl border border-white/20 shadow-xs">
+                      <span>{appIcon || "🏭"}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="brand-script block text-[32px] sm:text-[38px] leading-none">
+                      {factoryName || "Vienna"}
+                    </span>
+                    <span className="brand-tagline block mt-1 text-xs sm:text-sm">
+                      {systemTagline || "Factory Batch Watch & Expiry Guard"}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-cream/75">
+                      {lang === "ar" ? "منظومة رقابة الجودة والمخزون" : "QC & Expiry Management System"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <div className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] text-cream border border-white/15 font-medium">
+                    {lang === "ar" ? "نسخة المصنع الرسمية" : "Official Plant System"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Factory Names & Taglines */}
           <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-foreground">
-                {lang === "ar" ? "هوية المصنع وعنوان المنظومة" : "Factory Name & System Branding"}
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Building2 className="size-4 text-brand" />
+                <span>{lang === "ar" ? "اسم المصنع والوصف الرئيسي" : "Factory Name & Tagline"}</span>
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {lang === "ar"
-                  ? "تظهر هذه الهوية في ترويسة التطبيق، تقارير الطباعة، وتنبيهات الواتساب والتليجرام."
-                  : "Branding appears in application header, print sheets, and alert messages."}
+                  ? "اسم المصنع يظهر في الترويسة الرئيسية وتقارير الفحص والاعتماد وتنبيهات الطوارئ."
+                  : "Factory name appears in application header, inspection reports, and emergency alerts."}
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">
-                  {lang === "ar" ? "اسم المصنع أو العلامة التجارية" : "Factory / Brand Name"}
+                  {lang === "ar" ? "اسم المصنع / المنشأة" : "Factory / Brand Name"}
                 </Label>
                 <Input
                   value={factoryName}
@@ -911,11 +1153,14 @@ export function AdminControlHub() {
                   placeholder="Vienna"
                   className="text-xs font-medium"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  {lang === "ar" ? "مثال: مصنع فيينا للبسكوت والشيكولاتة" : "e.g. Vienna Chocolate & Biscuits"}
+                </p>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">
-                  {lang === "ar" ? "وصف وشعار المنظومة (Tagline)" : "System Subtitle / Tagline"}
+                  {lang === "ar" ? "شعار ووصف المنظومة (Tagline)" : "System Subtitle / Tagline"}
                 </Label>
                 <Input
                   value={systemTagline}
@@ -923,20 +1168,192 @@ export function AdminControlHub() {
                   placeholder="Factory Batch Watch & Expiry Guard"
                   className="text-xs font-medium"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  {lang === "ar" ? "يظهر أسفل اسم المصنع في الترويسة والتقارير" : "Appears below the factory name"}
+                </p>
               </div>
             </div>
+          </div>
 
-            <div className="pt-2 border-t flex justify-end">
-              <Button
-                type="button"
-                onClick={handleSaveBranding}
-                disabled={saving}
-                className="gap-1.5 bg-brand text-brand-foreground text-xs shadow-xs"
-              >
-                <Save className="size-4" />
-                <span>{lang === "ar" ? "حفظ هوية المصنع" : "Save Branding"}</span>
-              </Button>
+          {/* App Logo (Image Upload & URL) */}
+          <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <ImageIcon className="size-4 text-brand" />
+                <span>{lang === "ar" ? "شعار المصنع الرسمي (Logo Image)" : "Official Plant Logo"}</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {lang === "ar"
+                  ? "يمكنك رفع صورة شعار المصنع (PNG شفاف، JPG، أو SVG) ليحل محل الأيقونة في الترويسة."
+                  : "Upload a transparent PNG, JPG, or SVG to display as the main brand logo."}
+              </p>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 items-start">
+              {/* Upload & Link Controls */}
+              <div className="space-y-3">
+                <input
+                  ref={logoFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleUploadLogo}
+                  className="hidden"
+                />
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => logoFileInputRef.current?.click()}
+                    disabled={uploadingLogo}
+                    className="gap-2 text-xs font-medium border-brand/40 hover:border-brand hover:bg-brand/5"
+                  >
+                    {uploadingLogo ? (
+                      <Loader2 className="size-4 animate-spin text-brand" />
+                    ) : (
+                      <Upload className="size-4 text-brand" />
+                    )}
+                    <span>
+                      {uploadingLogo
+                        ? lang === "ar" ? "جارٍ الرفع..." : "Uploading..."
+                        : lang === "ar" ? "رفع صورة شعار من الجهاز" : "Upload Logo Image"}
+                    </span>
+                  </Button>
+
+                  {appLogoUrl && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAppLogoUrl(null)}
+                      className="text-destructive hover:bg-destructive/10 text-xs gap-1"
+                    >
+                      <X className="size-3.5" />
+                      <span>{lang === "ar" ? "إزالة اللوجو والرجوع للأيقونة" : "Remove Logo"}</span>
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    {lang === "ar" ? "أو رابط مباشر لصورة الشعار (URL)" : "Or Direct Logo Image URL"}
+                  </Label>
+                  <Input
+                    value={appLogoUrl || ""}
+                    onChange={(e) => setAppLogoUrl(e.target.value.trim() || null)}
+                    placeholder="https://example.com/logo.png"
+                    className="text-xs font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Logo Preview box */}
+              <div className="flex flex-col items-center justify-center p-4 rounded-xl border border-dashed border-border/80 bg-muted/20 min-h-[130px]">
+                {appLogoUrl ? (
+                  <div className="relative group text-center space-y-2">
+                    <img
+                      src={appLogoUrl}
+                      alt="Logo Preview"
+                      className="h-16 w-auto max-w-[200px] object-contain mx-auto rounded-lg bg-background p-1.5 border shadow-xs"
+                    />
+                    <p className="text-[11px] text-emerald-600 font-medium flex items-center justify-center gap-1">
+                      <CheckCircle2 className="size-3.5" />
+                      <span>{lang === "ar" ? "تم تحديد الشعار بنجاح" : "Logo active"}</span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-1 text-muted-foreground">
+                    <ImageIcon className="size-8 mx-auto stroke-1 opacity-50" />
+                    <p className="text-xs font-medium">
+                      {lang === "ar" ? "لا يوجد لوجو مخصص حالياً" : "No custom logo uploaded"}
+                    </p>
+                    <p className="text-[10px]">
+                      {lang === "ar" ? "يتم استخدام أيقونة المصنع أدناه كشعار أساسي" : "Fallback icon below is currently used"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* App Icon & Favicon */}
+          <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Sparkles className="size-4 text-brand" />
+                <span>{lang === "ar" ? "أيقونة المصنع والرمز المختصر (App Icon & Favicon)" : "App Icon & Symbol"}</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {lang === "ar"
+                  ? "تظهر هذه الأيقونة في ترويسة التطبيق وأيقونة التبويب في المتصفح عند عدم استخدام لوجو مصور."
+                  : "Displayed in header when no image logo is uploaded and as browser tab favicon."}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-xs font-semibold">
+                {lang === "ar" ? "اختر رمزاً سريعاً مناسباً لنشاط المصنع:" : "Choose a quick plant symbol:"}
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {BRAND_ICON_PRESETS.map((item) => (
+                  <button
+                    key={item.icon}
+                    type="button"
+                    onClick={() => setAppIcon(item.icon)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                      appIcon === item.icon
+                        ? "bg-brand/15 border-brand text-brand shadow-xs font-bold scale-105"
+                        : "bg-background border-border/80 text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="text-base">{item.icon}</span>
+                    <span>{item.label.split(" ")[0]}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 pt-2 items-center">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    {lang === "ar" ? "أو اكتب أيقونة/رمز مخصص (إيموجي أو أحرف):" : "Or type custom emoji / text icon:"}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={appIcon}
+                      onChange={(e) => setAppIcon(e.target.value)}
+                      placeholder="🏭"
+                      className="text-sm font-mono max-w-[120px] text-center"
+                    />
+                    <div className="size-10 flex items-center justify-center rounded-xl bg-brand/10 border border-brand/20 text-xl">
+                      {appIcon || "🏭"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-brand/30 bg-brand/5 shadow-xs">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+              <span>
+                {lang === "ar"
+                  ? "التعديلات تنعكس فوراً على جميع الأجهزة بعد الضغط على حفظ."
+                  : "Changes reflect immediately across all devices once saved."}
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleSaveBranding}
+              disabled={saving}
+              className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90 px-5 text-xs sm:text-sm font-bold shadow-sm"
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              <span>{lang === "ar" ? "حفظ هوية المصنع والشعار ✅" : "Save Factory Branding ✅"}</span>
+            </Button>
           </div>
         </div>
       )}
