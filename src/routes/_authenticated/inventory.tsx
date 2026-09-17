@@ -287,16 +287,60 @@ function InventoryPage() {
       if ((group?.batches?.length ?? 0) > 1) multiBatchCount++;
     }
 
-    const unitSums = new Map<string, number>();
+    let totalWeightKg = 0;
+    let weightBatchesCount = 0;
+    let unrecordedBatchesCount = 0;
+    const otherUnitsMap = new Map<string, number>();
+
     let criticalExpired = 0;
     let approvedReady = 0;
     let quarantineCount = 0;
 
     for (const it of all) {
-      if (it.quantity != null && !isNaN(it.quantity)) {
-        const u = it.unit?.trim() || (lang === "ar" ? "وحدة" : "unit");
-        unitSums.set(u, (unitSums.get(u) ?? 0) + it.quantity);
+      const q = it.quantity != null ? Number(it.quantity) : null;
+      if (q != null && !isNaN(q) && q > 0) {
+        const rawUnit = (it.unit || "").trim().toLowerCase();
+        if (
+          !rawUnit ||
+          rawUnit === "kg" ||
+          rawUnit === "kilo" ||
+          rawUnit === "kilos" ||
+          rawUnit === "kilogram" ||
+          rawUnit === "kilograms" ||
+          rawUnit === "كجم" ||
+          rawUnit === "كغ" ||
+          rawUnit === "كيلو" ||
+          rawUnit === "كيلوجرام" ||
+          rawUnit === "كيلوغرام"
+        ) {
+          totalWeightKg += q;
+          weightBatchesCount++;
+        } else if (
+          rawUnit === "g" ||
+          rawUnit === "gm" ||
+          rawUnit === "gram" ||
+          rawUnit === "grams" ||
+          rawUnit === "جم" ||
+          rawUnit === "جرام" ||
+          rawUnit === "غرام"
+        ) {
+          totalWeightKg += q / 1000;
+          weightBatchesCount++;
+        } else if (
+          rawUnit === "ton" ||
+          rawUnit === "tons" ||
+          rawUnit === "طن" ||
+          rawUnit === "أطنان"
+        ) {
+          totalWeightKg += q * 1000;
+          weightBatchesCount++;
+        } else {
+          otherUnitsMap.set(it.unit!.trim(), (otherUnitsMap.get(it.unit!.trim()) ?? 0) + q);
+        }
+      } else {
+        unrecordedBatchesCount++;
       }
+
       const days = daysUntil(it.expiry_date);
       const st = statusFor(days, thresholds);
       if (st === "critical" || st === "expired") criticalExpired++;
@@ -304,22 +348,26 @@ function InventoryPage() {
       if ((it.qc_status ?? "quarantine") === "quarantine") quarantineCount++;
     }
 
-    const totalStockDisplay =
-      Array.from(unitSums.entries())
-        .slice(0, 2)
-        .map(([u, q]) => `${q.toLocaleString()} ${u}`)
-        .join(" • ") || "—";
+    const totalWeightTons = totalWeightKg / 1000;
+    const otherUnits = Array.from(otherUnitsMap.entries()).map(([unit, quantity]) => ({
+      unit,
+      quantity,
+    }));
 
     return {
       totalBatches,
       uniqueMaterials,
       multiBatchCount,
-      totalStockDisplay,
       criticalExpired,
       approvedReady,
       quarantineCount,
+      totalWeightKg,
+      totalWeightTons,
+      weightBatchesCount,
+      unrecordedBatchesCount,
+      otherUnits,
     };
-  }, [items.data, materialGroupsMap, thresholds, lang]);
+  }, [items.data, materialGroupsMap, thresholds]);
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -552,25 +600,119 @@ function InventoryPage() {
           <InventoryKpiOverview
             uniqueMaterials={kpis.uniqueMaterials}
             totalBatches={kpis.totalBatches}
-            totalStockDisplay={kpis.totalStockDisplay}
             criticalExpired={kpis.criticalExpired}
             multiBatchCount={kpis.multiBatchCount}
             approvedReady={kpis.approvedReady}
+            quarantineCount={kpis.quarantineCount}
+            totalWeightKg={kpis.totalWeightKg}
+            totalWeightTons={kpis.totalWeightTons}
+            weightBatchesCount={kpis.weightBatchesCount}
+            unrecordedBatchesCount={kpis.unrecordedBatchesCount}
+            otherUnits={kpis.otherUnits}
             hasActiveFilters={hasActiveFilters}
             isUrgentActive={statusFilter === "critical" || statusFilter === "expired"}
             isMultiBatchActive={multiBatchOnly}
-            isApprovedActive={qcFilter === "approved"}
+            isApprovedActive={qcFilter === "approved" && !fefoOnly}
+            isQuarantineActive={qcFilter === "quarantine" && !fefoOnly}
             onFilterReset={resetAllFilters}
             onFilterUrgent={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
             onFilterMultiBatch={() => setMultiBatchOnly((prev) => !prev)}
-            onFilterApproved={() => setQcFilter(qcFilter === "approved" ? "all" : "approved")}
+            onFilterApproved={() => {
+              setQcFilter(qcFilter === "approved" && !fefoOnly ? "all" : "approved");
+              setFefoOnly(false);
+            }}
+            onFilterQuarantine={() => {
+              setQcFilter(qcFilter === "quarantine" && !fefoOnly ? "all" : "quarantine");
+              setFefoOnly(false);
+            }}
           />
         )}
 
+        {/* Expiry Status Quick Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+              statusFilter === "all"
+                ? "bg-brand text-brand-foreground shadow-xs ring-1 ring-brand"
+                : "bg-card border border-border/80 text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {t("quickFilterAll")} ({items.data?.length ?? 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "normal" ? "all" : "normal")}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              statusFilter === "normal"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20"
+            }`}
+          >
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span>{t("statusNormal")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({counts.normal})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "early" ? "all" : "early")}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              statusFilter === "early"
+                ? "bg-amber-600 text-white shadow-xs"
+                : "bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 hover:bg-amber-500/20"
+            }`}
+          >
+            <span className="size-2 rounded-full bg-amber-500" />
+            <span>{t("statusEarly")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({counts.early})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "medium" ? "all" : "medium")}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              statusFilter === "medium"
+                ? "bg-orange-600 text-white shadow-xs"
+                : "bg-orange-500/10 text-orange-800 dark:text-orange-300 border border-orange-500/20 hover:bg-orange-500/20"
+            }`}
+          >
+            <span className="size-2 rounded-full bg-orange-500" />
+            <span>{t("statusMedium")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({counts.medium})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "critical" ? "all" : "critical")}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              statusFilter === "critical"
+                ? "bg-rose-600 text-white shadow-xs"
+                : "bg-rose-500/10 text-rose-800 dark:text-rose-300 border border-rose-500/20 hover:bg-rose-500/20"
+            }`}
+          >
+            <span className="size-2 rounded-full bg-rose-500" />
+            <span>{t("statusCritical")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({counts.critical})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "expired" ? "all" : "expired")}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              statusFilter === "expired"
+                ? "bg-zinc-700 text-white shadow-xs"
+                : "bg-zinc-500/10 text-zinc-800 dark:text-zinc-300 border border-zinc-500/20 hover:bg-zinc-500/20"
+            }`}
+          >
+            <span className="size-2 rounded-full bg-zinc-500" />
+            <span>{t("statusExpired")}</span>
+            <span className="opacity-80 font-mono text-[10px]">({counts.expired})</span>
+          </button>
+        </div>
+
+        {/* Color Legend Card (دليل الألوان) */}
         {thresholds && <StatusLegend thresholds={thresholds} />}
 
-        {/* Quick Filter Pills for Instant Mobile & Fast Filtering */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {/* Secondary Filters Bar: All, Multi-Batch, FEFO */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
           <button
             type="button"
             onClick={resetAllFilters}
@@ -582,24 +724,6 @@ function InventoryPage() {
           >
             {t("quickFilterAll")} ({items.data?.length ?? 0})
           </button>
-          {STATUS_ORDER.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all flex items-center gap-1.5 ${
-                statusFilter === s
-                  ? "bg-cocoa text-cream shadow-sm ring-2 ring-brand"
-                  : "bg-card border border-border/80 text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <span className="size-2 rounded-full" style={{ backgroundColor: STATUS_TINT[s] }} />
-              <span>{t(STATUS_LABEL_KEY[s])}</span>
-              <span className="opacity-70 font-mono text-[11px]">({counts[s]})</span>
-            </button>
-          ))}
-
-          <div className="h-4 w-px bg-border/80 shrink-0 mx-1" />
 
           <button
             type="button"

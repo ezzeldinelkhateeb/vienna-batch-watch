@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useRegisterBackModal } from "@/lib/modal-stack";
+import { useNotificationsBadge } from "@/hooks/use-notifications-badge";
 import { triggerExpiryCheckNow } from "@/lib/whatsapp.functions";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
@@ -95,6 +96,13 @@ function NotificationsPage() {
   const { t, lang } = useI18n();
   const queryClient = useQueryClient();
   const runCheck = useServerFn(triggerExpiryCheckNow);
+
+  const { markAllAsRead } = useNotificationsBadge();
+
+  // Automatically mark notifications as read when opening this page
+  useEffect(() => {
+    markAllAsRead();
+  }, [markAllAsRead]);
 
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "telegram">("all");
   const [resultFilter, setResultFilter] = useState<"all" | "success" | "failed">("all");
@@ -201,6 +209,21 @@ function NotificationsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                markAllAsRead();
+                toast.success(lang === "ar" ? "تم تعليم جميع الإشعارات كمقروءة وتصفير العداد بنجاح" : "All marked as read");
+              }}
+              className="gap-1.5 text-xs h-9"
+              title={lang === "ar" ? "تصفير العداد وتعليم الكل كمقروء" : "Mark all as read"}
+            >
+              <Check className="size-3.5 text-emerald-600" />
+              <span>{lang === "ar" ? "تصفير العداد" : "Mark Read"}</span>
+            </Button>
+
             <Button
               type="button"
               variant="outline"

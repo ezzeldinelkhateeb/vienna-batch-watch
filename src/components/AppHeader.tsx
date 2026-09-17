@@ -4,6 +4,8 @@ import { Bell, LogOut, Package, Settings as SettingsIcon, Languages, ClipboardCh
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useSettings } from "@/hooks/use-settings";
+import { useAuth } from "@/hooks/use-auth";
+import { useNotificationsBadge } from "@/hooks/use-notifications-badge";
 import { useNavigationDrawer } from "@/hooks/use-navigation-drawer";
 import { AppNavigationDrawer } from "@/components/AppNavigationDrawer";
 import { Button } from "@/components/ui/button";
@@ -12,33 +14,16 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
   const { t, toggle, lang } = useI18n();
   const navigate = useNavigate();
   const settings = useSettings();
+  const { isAdmin } = useAuth();
   const { openDrawer } = useNavigationDrawer();
+  const { unreadCount } = useNotificationsBadge();
 
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/auth" });
   };
 
-  const urgentCountQuery = useQuery({
-    queryKey: ["urgent-badge-count"],
-    enabled: showNav,
-    queryFn: async () => {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + 30);
-      const limitStr = targetDate.toISOString().slice(0, 10);
-
-      const { count, error } = await supabase
-        .from("items")
-        .select("*", { count: "exact", head: true })
-        .lte("expiry_date", limitStr);
-
-      if (error) return 0;
-      return count ?? 0;
-    },
-    staleTime: 30 * 1000,
-  });
-
-  const urgentCount = urgentCountQuery.data ?? 0;
+  const urgentCount = showNav ? unreadCount : 0;
 
   const brandName = settings.data?.factory_name || "Vienna";
   const brandTagline = settings.data?.system_tagline || t("brandTagline");
@@ -113,12 +98,14 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
                   </Link>
                 </Button>
 
-                <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
-                  <Link to="/settings">
-                    <SettingsIcon className="size-4" />
-                    <span>{t("settings")}</span>
-                  </Link>
-                </Button>
+                {isAdmin && (
+                  <Button asChild variant="ghost" size="sm" className="text-cream hover:bg-white/10 text-xs font-semibold">
+                    <Link to="/settings">
+                      <SettingsIcon className="size-4" />
+                      <span>{t("settings")}</span>
+                    </Link>
+                  </Button>
+                )}
 
                 {/* Desktop More / Drawer Button */}
                 <Button

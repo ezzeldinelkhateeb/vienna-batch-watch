@@ -209,50 +209,66 @@ export function MonthlyAuditPage() {
     });
   }, [combinedRows, search, filterType]);
 
-  // Toggle single item review status (safe select -> update/insert)
+  // Toggle single item review status (Instant Optimistic UI Feedback)
   const toggleItemReview = useMutation({
+    onMutate: async ({ itemId, nextState }) => {
+      // Cancel ongoing refetches so optimistic data is not overwritten
+      await queryClient.cancelQueries({ queryKey: ["batch_monthly_reviews", selectedMonth] });
+      const previousReviews = queryClient.getQueryData<BatchReviewRow[]>([
+        "batch_monthly_reviews",
+        selectedMonth,
+      ]);
+
+      // Optimistically update React Query cache immediately
+      queryClient.setQueryData<BatchReviewRow[]>(
+        ["batch_monthly_reviews", selectedMonth],
+        (old = []) => {
+          const exists = old.some((r) => r.item_id === itemId);
+          if (exists) {
+            return old.map((r) =>
+              r.item_id === itemId
+                ? { ...r, is_reviewed: nextState, reviewed_at: new Date().toISOString() }
+                : r,
+            );
+          } else {
+            return [
+              ...old,
+              {
+                id: `optimistic-${itemId}`,
+                item_id: itemId,
+                month_year: selectedMonth,
+                is_reviewed: nextState,
+                physical_count: null,
+                notes: null,
+                reviewed_by: user?.id ?? null,
+                reviewed_at: new Date().toISOString(),
+              },
+            ];
+          }
+        },
+      );
+
+      return { previousReviews };
+    },
     mutationFn: async ({ itemId, nextState }: { itemId: string; nextState: boolean }) => {
       const nowIso = new Date().toISOString();
-      const { data: existing, error: selectErr } = await supabase
+      const { error } = await supabase
         .from("batch_monthly_reviews")
-        .select("id")
-        .eq("item_id", itemId)
-        .eq("month_year", selectedMonth)
-        .maybeSingle();
-
-      if (selectErr && !selectErr.message.includes("No rows")) {
-        throw selectErr;
-      }
-
-      let error;
-      if (existing?.id) {
-        const res = await supabase
-          .from("batch_monthly_reviews")
-          .update({
-            is_reviewed: nextState,
-            reviewed_by: user?.id ?? null,
-            reviewed_at: nowIso,
-          })
-          .eq("id", existing.id);
-        error = res.error;
-      } else {
-        const res = await supabase
-          .from("batch_monthly_reviews")
-          .insert({
+        .upsert(
+          {
             item_id: itemId,
             month_year: selectedMonth,
             is_reviewed: nextState,
             reviewed_by: user?.id ?? null,
             reviewed_at: nowIso,
-          });
-        error = res.error;
-      }
+          },
+          { onConflict: "item_id,month_year" }
+        );
 
       if (error) throw error;
       return { itemId, nextState };
     },
     onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["batch_monthly_reviews", selectedMonth] });
       const targetItem = itemsQuery.data?.find((i) => i.id === data.itemId);
       void logActivity({
         action_type: "audit_status_toggle",
@@ -261,7 +277,13 @@ export function MonthlyAuditPage() {
         details: { month_year: selectedMonth, is_reviewed: data.nextState },
       });
     },
-    onError: (err: any) => {
+    onError: (err: any, _variables, context) => {
+      if (context?.previousReviews) {
+        queryClient.setQueryData(
+          ["batch_monthly_reviews", selectedMonth],
+          context.previousReviews,
+        );
+      }
       console.error("toggleItemReview error:", err);
       const msg = err?.message || err?.details || "";
       if (
@@ -284,6 +306,9 @@ export function MonthlyAuditPage() {
           { duration: 6000 }
         );
       }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["batch_monthly_reviews", selectedMonth] });
     },
   });
 
@@ -817,7 +842,7 @@ export function MonthlyAuditPage() {
                         </span>
                         <button
                           type="button"
-                          disabled={!canEditItems || toggleItemReview.isPending}
+                          disabled={!canEditItems}
                           onClick={() =>
                             toggleItemReview.mutate({
                               itemId: item.id,
@@ -974,7 +999,7 @@ export function MonthlyAuditPage() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            disabled={!canEditItems || toggleItemReview.isPending}
+                            disabled={!canEditItems}
                             onClick={() =>
                               toggleItemReview.mutate({
                                 itemId: item.id,

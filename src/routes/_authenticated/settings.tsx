@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -75,7 +75,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 function SettingsPage() {
   const { t, lang } = useI18n();
-  const { session, isAdmin } = useAuth();
+  const { session, isAdmin, loading: authLoading } = useAuth();
   const search = Route.useSearch();
   const settings = useSettings();
   const queryClient = useQueryClient();
@@ -347,6 +347,36 @@ function SettingsPage() {
       setActivatingWebhook(false);
     }
   };
+
+  if (!authLoading && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-lg px-4 py-16 text-center">
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-8 shadow-sm space-y-4">
+            <div className="size-16 rounded-full bg-destructive/20 text-destructive flex items-center justify-center mx-auto">
+              <Lock className="size-8" />
+            </div>
+            <h1 className="text-xl font-bold text-foreground">
+              {lang === "ar" ? "إعدادات النظام محصورة للأدمن فقط" : "Administrator Access Only"}
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              {lang === "ar"
+                ? "عذراً، إعدادات البرنامج والتحكم في قنوات التنبيهات والمخازن وصلاحيات الفريق مقتصرة حصرياً على مدير النظام (Admin)."
+                : "System settings, alert channels, and team permissions are restricted exclusively to full Administrators."}
+            </p>
+            <div className="pt-2">
+              <Button asChild className="bg-brand text-white font-bold">
+                <Link to="/inventory">
+                  {lang === "ar" ? "العودة لسجل المخزون" : "Back to Inventory"}
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

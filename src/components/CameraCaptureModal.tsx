@@ -273,12 +273,50 @@ export function CameraCaptureModal({
   };
 
   // Discard preview and retake
-  const handleRetake = () => {
+  const handleRetake = useCallback(() => {
     if (pendingPhoto?.previewUrl) {
       URL.revokeObjectURL(pendingPhoto.previewUrl);
     }
     setPendingPhoto(null);
-  };
+
+    // Re-verify stream tracks and ensure video playback is active
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    const tracks = stream?.getVideoTracks() || [];
+    const isLive = tracks.length > 0 && tracks.some((t) => t.readyState === "live" && t.enabled);
+
+    if (video && stream && isLive) {
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
+      video.play().catch(() => {
+        void startCamera(facingMode);
+      });
+    } else {
+      void startCamera(facingMode);
+    }
+  }, [pendingPhoto, startCamera, facingMode]);
+
+  // Ensure stream playback resumes when returning to camera mode
+  useEffect(() => {
+    if (open && !pendingPhoto) {
+      const video = videoRef.current;
+      const stream = streamRef.current;
+      const tracks = stream?.getVideoTracks() || [];
+      const isLive = tracks.length > 0 && tracks.some((t) => t.readyState === "live" && t.enabled);
+
+      if (video && stream && isLive) {
+        if (video.srcObject !== stream) {
+          video.srcObject = stream;
+        }
+        video.play().catch(() => {
+          void startCamera(facingMode);
+        });
+      } else if (open && !cameraLoading && !cameraError) {
+        void startCamera(facingMode);
+      }
+    }
+  }, [open, pendingPhoto, startCamera, facingMode, cameraLoading, cameraError]);
 
   // Approve & finalize photo
   const handleApprovePhoto = async (keepOpen = false) => {
@@ -321,17 +359,33 @@ export function CameraCaptureModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-black text-white border-white/20 max-h-[92dvh] sm:max-h-none" disableSwipeToClose hideDragHandle>
-          {pendingPhoto ? (
-            /* =========================================================================
-               1. Photo Review & Approval Screen (Before Saving)
-               ========================================================================= */
-            <>
-              <DialogHeader className="p-3 bg-neutral-900 border-b border-white/10 flex flex-row items-center justify-between z-20">
-                <DialogTitle className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+        <DialogContent
+          className="max-w-md p-0 overflow-hidden bg-black text-white border-white/20 max-h-[92dvh] sm:max-h-none"
+          disableSwipeToClose
+          hideDragHandle
+        >
+          {/* Header */}
+          <DialogHeader className="p-3 bg-neutral-900 border-b border-white/10 flex flex-row items-center justify-between z-20">
+            <DialogTitle className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+              {pendingPhoto ? (
+                <>
                   <Check className="size-4 text-emerald-400" />
                   <span>{lang === "ar" ? "معاينة واعتماد الصورة" : "Preview & Approve Photo"}</span>
-                </DialogTitle>
+                </>
+              ) : (
+                <>
+                  <Camera className="size-4 text-brand" />
+                  <span>{lang === "ar" ? "تصوير الصنف بالكاميرا" : "Capture Item Photo"}</span>
+                </>
+              )}
+            </DialogTitle>
+            <div className="flex items-center gap-1.5">
+              {!pendingPhoto && capturedCount > 0 && (
+                <span className="rounded-full bg-brand/30 px-2 py-0.5 text-xs text-brand font-bold border border-brand/50">
+                  {capturedCount} {lang === "ar" ? "صور معتمدة" : "approved"}
+                </span>
+              )}
+              {pendingPhoto ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -343,10 +397,100 @@ export function CameraCaptureModal({
                 >
                   <X className="size-4" />
                 </Button>
-              </DialogHeader>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onOpenChange(false)}
+                  className="size-8 rounded-full text-white/70 hover:text-white hover:bg-white/10"
+                  title={lang === "ar" ? "إغلاق" : "Close"}
+                >
+                  <X className="size-4" />
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
 
-              {/* Preview Viewport with Rotation */}
-              <div className="relative aspect-[3/4] w-full bg-neutral-950 flex items-center justify-center overflow-hidden p-3 select-none">
+          {/* Main Viewport Container - aspect 3/4 */}
+          <div className="relative aspect-[3/4] w-full bg-neutral-950 flex items-center justify-center overflow-hidden">
+            {/* Shutter flash overlay */}
+            {flashAnimation && (
+              <div className="absolute inset-0 bg-white z-50 animate-out fade-out duration-150 pointer-events-none" />
+            )}
+
+            {/* Video stream - ALWAYS MOUNTED so stream never disconnects */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`size-full object-cover ${facingMode === "user" ? "-scale-x-100" : ""}`}
+            />
+
+            {/* Viewfinder crosshairs overlay (shown when NOT in preview) */}
+            {!pendingPhoto && (
+              <div className="absolute inset-8 border border-white/25 rounded-2xl pointer-events-none flex flex-col justify-between p-4 z-10">
+                <div className="flex justify-between">
+                  <span className="size-5 border-t-2 border-l-2 border-brand" />
+                  <span className="size-5 border-t-2 border-r-2 border-brand" />
+                </div>
+                <p className="text-[11px] text-white/70 text-center bg-black/40 px-2 py-1 rounded-full backdrop-blur-xs self-center">
+                  {lang === "ar"
+                    ? "وجّه الكاميرا نحو الصنف أو كارت البيانات"
+                    : "Point camera at item or label"}
+                </p>
+                <div className="flex justify-between">
+                  <span className="size-5 border-b-2 border-l-2 border-brand" />
+                  <span className="size-5 border-b-2 border-r-2 border-brand" />
+                </div>
+              </div>
+            )}
+
+            {/* Loading Indicator */}
+            {cameraLoading && !pendingPhoto && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 gap-3">
+                <RefreshCw className="size-8 text-brand animate-spin" />
+                <p className="text-xs text-white/80">
+                  {lang === "ar" ? "جاري تشغيل الكاميرا..." : "Starting camera..."}
+                </p>
+              </div>
+            )}
+
+            {/* Camera Error / Permission Fallback View */}
+            {cameraError && !pendingPhoto && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-neutral-950/95 text-center z-30 gap-3">
+                <div className="size-12 rounded-full bg-destructive/20 text-destructive flex items-center justify-center">
+                  <AlertCircle className="size-6" />
+                </div>
+                <p className="text-xs text-white/90 leading-relaxed font-medium">
+                  {cameraError}
+                </p>
+                <div className="flex flex-col gap-2 w-full pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2 border-white/30 text-white hover:bg-white/15"
+                    onClick={() => void startCamera(facingMode)}
+                  >
+                    <RefreshCw className="size-4" />
+                    <span>{lang === "ar" ? "إعادة المحاولة" : "Try Again"}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    className="w-full gap-2 bg-brand hover:bg-brand/90 text-white font-semibold"
+                    onClick={() => systemCameraRef.current?.click()}
+                  >
+                    <Smartphone className="size-4" />
+                    <span>{lang === "ar" ? "فتح كاميرا أندرويد الأصلية" : "Open System Camera"}</span>
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Photo Review Overlay (shown when pendingPhoto is active) */}
+            {pendingPhoto && (
+              <div className="absolute inset-0 bg-neutral-950 flex items-center justify-center overflow-hidden p-3 select-none z-30">
                 <img
                   src={pendingPhoto.previewUrl}
                   alt="Captured Preview"
@@ -378,8 +522,13 @@ export function CameraCaptureModal({
                   </div>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* Preview Action Controls: Retake / Rotate / Approve */}
+          {/* Bottom Action Controls */}
+          {pendingPhoto ? (
+            /* Preview Action Controls: Retake / Rotate / Use Photo */
+            <>
               <div className="p-3.5 bg-neutral-950 flex items-center justify-between gap-2.5 border-t border-white/15">
                 {/* Retake Button */}
                 <Button
@@ -387,10 +536,10 @@ export function CameraCaptureModal({
                   variant="outline"
                   disabled={isProcessingApproval}
                   onClick={handleRetake}
-                  className="flex-1 h-11 gap-1.5 border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white text-xs font-semibold rounded-xl active:scale-98"
+                  className="flex-1 h-11 gap-1.5 border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 text-xs font-bold rounded-xl active:scale-98"
                 >
                   <RotateCcw className="size-4 text-amber-400" />
-                  <span>{lang === "ar" ? "إعادة التقاط" : "Retake"}</span>
+                  <span>{lang === "ar" ? "إعادة التصوير" : "Retake Photo"}</span>
                 </Button>
 
                 {/* Rotate 90 deg */}
@@ -406,7 +555,7 @@ export function CameraCaptureModal({
                   <span>{lang === "ar" ? "تدوير 90°" : "Rotate"}</span>
                 </Button>
 
-                {/* Approve & Use (Closes modal & uses photo) */}
+                {/* Use Photo */}
                 <Button
                   type="button"
                   disabled={isProcessingApproval}
@@ -414,7 +563,7 @@ export function CameraCaptureModal({
                   className="flex-1 h-11 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30 active:scale-98"
                 >
                   <Check className="size-4 stroke-[3]" />
-                  <span>{lang === "ar" ? "اعتماد واستخدام" : "Approve & Use"}</span>
+                  <span>{lang === "ar" ? "استخدام الصورة" : "Use Photo"}</span>
                 </Button>
               </div>
 
@@ -440,98 +589,8 @@ export function CameraCaptureModal({
               </div>
             </>
           ) : (
-            /* =========================================================================
-               2. Live Camera Viewfinder Screen
-               ========================================================================= */
+            /* Live Camera Shutter Controls */
             <>
-              <DialogHeader className="p-3 bg-gradient-to-b from-black/90 to-transparent flex flex-row items-center justify-between z-20">
-                <DialogTitle className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
-                  <Camera className="size-4 text-brand" />
-                  <span>{lang === "ar" ? "تصوير الصنف بالكاميرا" : "Capture Item Photo"}</span>
-                </DialogTitle>
-                {capturedCount > 0 && (
-                  <span className="rounded-full bg-brand/30 px-2 py-0.5 text-xs text-brand font-bold border border-brand/50">
-                    {capturedCount} {lang === "ar" ? "صور معتمدة" : "approved"}
-                  </span>
-                )}
-              </DialogHeader>
-
-              {/* Camera Viewport */}
-              <div className="relative aspect-[3/4] w-full bg-neutral-950 flex items-center justify-center overflow-hidden">
-                {/* Shutter flash overlay */}
-                {flashAnimation && (
-                  <div className="absolute inset-0 bg-white z-40 animate-out fade-out duration-150" />
-                )}
-
-                {/* Video stream */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`size-full object-cover ${facingMode === "user" ? "-scale-x-100" : ""}`}
-                />
-
-                {/* Viewfinder crosshairs overlay */}
-                <div className="absolute inset-8 border border-white/25 rounded-2xl pointer-events-none flex flex-col justify-between p-4">
-                  <div className="flex justify-between">
-                    <span className="size-5 border-t-2 border-l-2 border-brand" />
-                    <span className="size-5 border-t-2 border-r-2 border-brand" />
-                  </div>
-                  <p className="text-[11px] text-white/70 text-center bg-black/40 px-2 py-1 rounded-full backdrop-blur-xs self-center">
-                    {lang === "ar"
-                      ? "وجّه الكاميرا نحو الصنف أو كارت البيانات"
-                      : "Point camera at item or label"}
-                  </p>
-                  <div className="flex justify-between">
-                    <span className="size-5 border-b-2 border-l-2 border-brand" />
-                    <span className="size-5 border-b-2 border-r-2 border-brand" />
-                  </div>
-                </div>
-
-                {/* Loading Indicator */}
-                {cameraLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 gap-3">
-                    <RefreshCw className="size-8 text-brand animate-spin" />
-                    <p className="text-xs text-white/80">
-                      {lang === "ar" ? "جاري تشغيل الكاميرا..." : "Starting camera..."}
-                    </p>
-                  </div>
-                )}
-
-                {/* Camera Error / Permission Fallback View */}
-                {cameraError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-neutral-950/95 text-center z-30 gap-3">
-                    <div className="size-12 rounded-full bg-destructive/20 text-destructive flex items-center justify-center">
-                      <AlertCircle className="size-6" />
-                    </div>
-                    <p className="text-xs text-white/90 leading-relaxed font-medium">
-                      {cameraError}
-                    </p>
-                    <div className="flex flex-col gap-2 w-full pt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full gap-2 border-white/30 text-white hover:bg-white/15"
-                        onClick={() => void startCamera(facingMode)}
-                      >
-                        <RefreshCw className="size-4" />
-                        <span>{lang === "ar" ? "إعادة المحاولة" : "Try Again"}</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        className="w-full gap-2 bg-brand hover:bg-brand/90 text-white font-semibold"
-                        onClick={() => systemCameraRef.current?.click()}
-                      >
-                        <Smartphone className="size-4" />
-                        <span>{lang === "ar" ? "فتح كاميرا أندرويد الأصلية" : "Open System Camera"}</span>
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Controls Bar */}
               <div className="p-4 bg-black flex items-center justify-between gap-4 border-t border-white/15">
                 {/* Flashlight button */}
                 <Button

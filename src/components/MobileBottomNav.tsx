@@ -1,9 +1,10 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Package, Bell, Plus, QrCode, Menu } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/hooks/use-auth";
 import { useNavigationDrawer } from "@/hooks/use-navigation-drawer";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useNotificationsBadge } from "@/hooks/use-notifications-badge";
+import { toast } from "sonner";
 
 interface MobileBottomNavProps {
   onAddItem?: () => void;
@@ -12,32 +13,15 @@ interface MobileBottomNavProps {
 
 export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
   const { t, lang } = useI18n();
+  const { canEditItems } = useAuth();
   const location = useLocation();
   const pathname = location.pathname;
   const { openDrawer } = useNavigationDrawer();
+  const { unreadCount } = useNotificationsBadge();
 
   const isInventory = pathname === "/" || pathname === "/inventory";
   const isNotifications = pathname === "/notifications";
-
-  const urgentCountQuery = useQuery({
-    queryKey: ["urgent-badge-count"],
-    queryFn: async () => {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + 30);
-      const limitStr = targetDate.toISOString().slice(0, 10);
-
-      const { count, error } = await supabase
-        .from("items")
-        .select("*", { count: "exact", head: true })
-        .lte("expiry_date", limitStr);
-
-      if (error) return 0;
-      return count ?? 0;
-    },
-    staleTime: 30 * 1000,
-  });
-
-  const urgentCount = urgentCountQuery.data ?? 0;
+  const urgentCount = isNotifications ? 0 : unreadCount;
 
   const handleScanClick = () => {
     navigator.vibrate?.(15);
@@ -50,6 +34,14 @@ export function MobileBottomNav({ onAddItem, onScan }: MobileBottomNavProps) {
 
   const handleAddClick = () => {
     navigator.vibrate?.(20);
+    if (!canEditItems) {
+      toast.error(
+        lang === "ar"
+          ? "حسابك بصلاحية المشاهدة فقط، لا تملك صلاحية إضافة أصناف"
+          : "View-only account cannot add items",
+      );
+      return;
+    }
     if (onAddItem) {
       onAddItem();
     } else {

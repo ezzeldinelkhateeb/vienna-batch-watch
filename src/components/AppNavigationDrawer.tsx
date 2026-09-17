@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
+import { useNotificationsBadge } from "@/hooks/use-notifications-badge";
+
 export function AppNavigationDrawer() {
   const { t, lang, toggle } = useI18n();
   const { user, isAdmin } = useAuth();
@@ -38,6 +40,7 @@ export function AppNavigationDrawer() {
   const location = useLocation();
   const pathname = location.pathname;
   const { isOpen, closeDrawer } = useNavigationDrawer();
+  const { unreadCount } = useNotificationsBadge();
 
   const brandName = settings.data?.factory_name || "Vienna";
   const brandTagline = settings.data?.system_tagline || t("brandTagline");
@@ -48,25 +51,7 @@ export function AppNavigationDrawer() {
   const enableWaste = settings.data?.feature_flags.enable_waste_prevention !== false;
   const enableScanner = settings.data?.feature_flags.enable_barcode_scanner !== false;
 
-  const urgentCountQuery = useQuery({
-    queryKey: ["urgent-badge-count"],
-    queryFn: async () => {
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + 30);
-      const limitStr = targetDate.toISOString().slice(0, 10);
-
-      const { count, error } = await supabase
-        .from("items")
-        .select("*", { count: "exact", head: true })
-        .lte("expiry_date", limitStr);
-
-      if (error) return 0;
-      return count ?? 0;
-    },
-    staleTime: 30 * 1000,
-  });
-
-  const urgentCount = urgentCountQuery.data ?? 0;
+  const urgentCount = unreadCount;
 
   const handleAction = (action: string) => {
     closeDrawer();
@@ -308,34 +293,34 @@ export function AppNavigationDrawer() {
           </div>
 
           {/* Section 3: System & Administration */}
-          <div className="space-y-1 pt-2 border-t border-border/70">
-            <p className="px-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-              {lang === "ar" ? "النظام والإدارة" : "System & Settings"}
-            </p>
+          {isAdmin && (
+            <div className="space-y-1 pt-2 border-t border-border/70">
+              <p className="px-2 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                {lang === "ar" ? "النظام والإدارة" : "System & Settings"}
+              </p>
 
-            <Link
-              to="/settings"
-              onClick={closeDrawer}
-              className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
-                isCurrent("/settings")
-                  ? "bg-brand text-brand-foreground shadow-sm"
-                  : "hover:bg-muted text-foreground"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`size-8 rounded-lg flex items-center justify-center ${
-                    isCurrent("/settings") ? "bg-white/20 text-white" : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <Settings className="size-4" />
+              <Link
+                to="/settings"
+                onClick={closeDrawer}
+                className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
+                  isCurrent("/settings")
+                    ? "bg-brand text-brand-foreground shadow-sm"
+                    : "hover:bg-muted text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`size-8 rounded-lg flex items-center justify-center ${
+                      isCurrent("/settings") ? "bg-white/20 text-white" : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-300"
+                    }`}
+                  >
+                    <Settings className="size-4" />
+                  </div>
+                  <span>{lang === "ar" ? "الإعدادات ولوحة المسؤول" : "Settings & Admin Hub"}</span>
                 </div>
-                <span>{lang === "ar" ? "الإعدادات ولوحة المسؤول" : "Settings & Admin Hub"}</span>
-              </div>
-              <ArrowIcon className="size-4 opacity-60" />
-            </Link>
+                <ArrowIcon className="size-4 opacity-60" />
+              </Link>
 
-            {isAdmin && (
               <button
                 type="button"
                 onClick={() => handleAction("backup")}
@@ -349,8 +334,11 @@ export function AppNavigationDrawer() {
                 </div>
                 <ArrowIcon className="size-4 opacity-60" />
               </button>
-            )}
+            </div>
+          )}
 
+          {/* Section 4: Preferences / Language */}
+          <div className="space-y-1 pt-2 border-t border-border/70">
             <button
               type="button"
               onClick={toggle}

@@ -157,10 +157,10 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
         lang === "ar"
           ? `تم إنشاء حساب ${email} بنجاح كـ (${
               role === "admin"
-                ? "مدير نظام"
+                ? "Admin (مدير نظام)"
                 : role === "quality"
-                ? "مسؤول جودة ومخازن"
-                : "مشاهدة فقط"
+                ? "مهندس إدخال (Data Entry Engineer)"
+                : "Viewer / Free (مشاهد فقط)"
             })!`
           : `Account ${email} created successfully as (${role})!`,
       );
@@ -198,10 +198,10 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
         lang === "ar"
           ? `تم تعديل صلاحية ${member.email} إلى (${
               newRole === "admin"
-                ? "مدير نظام"
+                ? "Admin (مدير نظام)"
                 : newRole === "quality"
-                ? "مسؤول جودة ومخازن"
-                : "مشاهدة فقط"
+                ? "مهندس إدخال (Data Entry Engineer)"
+                : "Viewer / Free (مشاهد فقط)"
             })`
           : `Updated role for ${member.email} to ${newRole}`,
       );
@@ -295,20 +295,20 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                     onChange={(e) => setRole(e.target.value as UserRole)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   >
-                    <option value="quality">
-                      {lang === "ar"
-                        ? "مسؤول جودة ومخازن (Quality) — إدخال، فحص، تقارير، جرد"
-                        : "QC & Stores (Quality) — Entry, QC release, reports, audit"}
-                    </option>
                     <option value="admin">
                       {lang === "ar"
-                        ? "مدير نظام كامل الصلاحيات (Admin) — كامل الصلاحيات، حذف، قفل"
-                        : "Full Administrator (Admin) — Full access, delete, lock"}
+                        ? "⭐ Admin (مدير نظام) — صلاحيات كاملة: إضافة/تعديل/حذف + إعدادات البرنامج"
+                        : "⭐ Admin — Full access: add/edit/delete + system settings"}
+                    </option>
+                    <option value="quality">
+                      {lang === "ar"
+                        ? "✏️ مهندس إدخال (Data Entry) — إضافة وتعديل وجرد (بدون وصول للإعدادات)"
+                        : "✏️ Data Entry Engineer — Add/edit/audit (no settings access)"}
                     </option>
                     <option value="view_only">
                       {lang === "ar"
-                        ? "مشاهدة فقط (View Only) — استعراض وتقارير بدون تعديل"
-                        : "View Only — Read-only access, no edits"}
+                        ? "👁️ Viewer / Free (مشاهد فقط) — استعراض وقراءة فقط بدون تعديل أو حذف"
+                        : "👁️ Viewer / Free — Read-only, no edits/deletions"}
                     </option>
                   </select>
                 </div>
@@ -341,6 +341,45 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
               </form>
             </DialogContent>
           </Dialog>
+        </div>
+      </div>
+
+      {/* 3-Tier Roles Legend for Admin */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 pt-1">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-amber-950 dark:text-amber-200">
+            <span>⭐</span>
+            <span>{lang === "ar" ? "Admin (مدير نظام)" : "Admin"}</span>
+          </div>
+          <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80 mt-1 leading-relaxed">
+            {lang === "ar"
+              ? "صلاحيات كاملة: إضافة/تعديل/حذف بيانات + التحكم في إعدادات البرنامج (الواتساب، العتبات، المخازن، إلخ)."
+              : "Full permissions: add/edit/delete data + manage system settings (WhatsApp, thresholds, warehouses)."}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-950 dark:text-emerald-200">
+            <span>✏️</span>
+            <span>{lang === "ar" ? "مهندس إدخال (Data Entry)" : "Data Entry Engineer"}</span>
+          </div>
+          <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80 mt-1 leading-relaxed">
+            {lang === "ar"
+              ? "يقدر يضيف ويدخل بيانات (أصناف، حركات وارد/منصرف، جرد)، لكن مايشوفش ولا يتحكمش في إعدادات البرنامج."
+              : "Can enter and edit items, stock movements, and audits — cannot see or control system settings."}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-slate-300 dark:border-slate-700 bg-muted/40 p-3">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+            <span>👁️</span>
+            <span>{lang === "ar" ? "Viewer / Free (مشاهد فقط)" : "Viewer / Free"}</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+            {lang === "ar"
+              ? "حساب محدود: استعراض ومطالعة البيانات والجرد والتقارير فقط من غير أي تعديل أو إضافة أو حذف."
+              : "Limited read-only account: can only view data without editing, adding, or deleting."}
+          </p>
         </div>
       </div>
 
@@ -393,15 +432,15 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                     <div className="text-xs text-muted-foreground">
                       {m.role === "admin"
                         ? lang === "ar"
-                          ? "مدير نظام كامل الصلاحيات (Admin)"
-                          : "Full System Administrator"
+                          ? "⭐ Admin — صلاحيات كاملة: إضافة/تعديل/حذف + التحكم في إعدادات البرنامج"
+                          : "Full Admin: Add/Edit/Delete + system settings control"
                         : m.role === "quality"
                         ? lang === "ar"
-                          ? "مسؤول جودة ومخازن (Quality)"
-                          : "QC Inspector & Storekeeper"
+                          ? "✏️ مهندس إدخال (Data Entry) — إضافة وتعديل وجرد (بدون إعدادات)"
+                          : "Data Entry Engineer: Add/edit/audit (no settings)"
                         : lang === "ar"
-                        ? "صلاحية مشاهدة فقط (View Only)"
-                        : "View Only Access"}
+                        ? "👁️ Viewer / Free — حساب محدود: استعراض ومشاهدة فقط"
+                        : "Viewer / Free: Read-only access"}
                     </div>
                   </div>
                 </div>
@@ -410,15 +449,15 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                   <select
                     value={m.role}
                     onChange={(e) => void handleChangeRole(m, e.target.value as UserRole)}
-                    className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus:outline-none focus:ring-1 focus:ring-ring font-medium"
+                    className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus:outline-none focus:ring-1 focus:ring-ring font-semibold"
                   >
-                    <option value="quality">🔬 {lang === "ar" ? "مسؤول جودة (Quality)" : "Quality"}</option>
-                    <option value="admin">⭐ {lang === "ar" ? "مدير نظام (Admin)" : "Admin"}</option>
-                    <option value="view_only">👁️ {lang === "ar" ? "مشاهدة فقط (View Only)" : "View Only"}</option>
+                    <option value="admin">⭐ {lang === "ar" ? "Admin (مدير نظام)" : "Admin"}</option>
+                    <option value="quality">✏️ {lang === "ar" ? "مهندس إدخال (Data Entry)" : "Data Entry"}</option>
+                    <option value="view_only">👁️ {lang === "ar" ? "Viewer / Free (مشاهد فقط)" : "Viewer / Free"}</option>
                   </select>
                 ) : (
                   <span className="rounded-md bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2.5 py-1 text-xs font-bold">
-                    {lang === "ar" ? "حسابك الحالي" : "Current Account"}
+                    {lang === "ar" ? "حسابك الحالي (Admin)" : "Current Account (Admin)"}
                   </span>
                 )}
               </div>

@@ -117,7 +117,6 @@ export function ItemFormDialog({
 
   // Multi-photo state & Camera modals
   const fileInput = useRef<HTMLInputElement>(null);
-  const systemCameraRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<FormPhotoItem[]>([]);
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -586,19 +585,6 @@ export function ItemFormDialog({
               accept="image/*"
               className="hidden"
               onChange={(e) => pickFiles(e.target.files)}
-            />
-            <input
-              ref={systemCameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  addPhotoFile(e.target.files[0]);
-                  e.target.value = "";
-                }
-              }}
             />
 
             {photos.length === 0 ? (
