@@ -233,76 +233,48 @@ export function InventoryKpiOverview({
         </button>
       </div>
 
-      {/* 2. Dedicated Total Warehouse Balance Card (في الأسفل بعرض كامل وبحساب دقيق) */}
-      <div className="w-full rounded-2xl border border-amber-900/20 bg-gradient-to-br from-card via-card to-amber-50/50 dark:to-amber-950/20 p-4 sm:p-5 shadow-xs transition-all">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 sm:size-12 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-brand shadow-xs border border-brand/20">
-              <Scale className="size-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm sm:text-base font-black text-cocoa">
-                  {t("kpiTotalStockBalance")}
-                </h3>
-                <span className="rounded-md bg-brand/10 text-brand px-2 py-0.5 text-[10px] font-bold">
-                  {lang === "ar" ? "ميزان الخامات الفعلي" : "Consolidated Weight"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {lang === "ar"
-                  ? "الرصيد التراكمي الفعلي لجميع تشغيلات المواد الخام المسجلة بالمستودع"
-                  : "Consolidated actual physical stock weight across all recorded raw materials"}
-              </p>
-            </div>
+      {/* 2. Compact Warehouse Stock Balance Bar (شريط رصيد المخزن المصغر) */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-amber-900/15 bg-card/90 px-3.5 py-2 shadow-2xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+            <Scale className="size-3.5" />
           </div>
-
-          <div className="text-start sm:text-end bg-amber-500/10 sm:bg-transparent p-3 sm:p-0 rounded-xl border border-amber-500/20 sm:border-0">
-            <div className="flex items-baseline gap-2 sm:justify-end flex-wrap">
-              <span className="text-2xl sm:text-3xl font-black text-cocoa font-mono tracking-tight">
-                {totalWeightKg.toLocaleString(lang === "ar" ? "ar-EG" : "en-US")}
-              </span>
-              <span className="text-sm font-bold text-cocoa">
-                {lang === "ar" ? "كجم" : "kg"}
-              </span>
-              <span className="text-sm sm:text-base font-bold text-muted-foreground font-mono">
-                ({totalWeightTons.toLocaleString(lang === "ar" ? "ar-EG" : "en-US", { maximumFractionDigits: 2 })} {lang === "ar" ? "طن" : "tons"})
-              </span>
-            </div>
+          <div className="flex items-baseline gap-1.5 truncate">
+            <span className="text-xs font-bold text-foreground">
+              {lang === "ar" ? "رصيد المخزن الفعلي:" : "Stock Balance:"}
+            </span>
+            <span className="text-sm font-black text-cocoa font-mono">
+              {totalWeightKg.toLocaleString("en-US")}
+            </span>
+            <span className="text-xs font-bold text-cocoa">
+              {lang === "ar" ? "كجم" : "kg"}
+            </span>
+            <span className="text-[11px] font-semibold text-muted-foreground font-mono">
+              ({totalWeightTons.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })} {lang === "ar" ? "طن" : "tons"})
+            </span>
           </div>
         </div>
 
-        {/* Breakdown sub-badges */}
-        <div className="mt-3.5 pt-3 border-t border-border/70 flex flex-wrap items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-900 dark:text-emerald-300 border border-emerald-500/20">
-            <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+        <div className="flex items-center gap-1.5 ms-auto text-[11px]">
+          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-800 dark:text-emerald-300 font-mono">
+            <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
             <span>
-              {lang === "ar"
-                ? `${weightBatchesCount} تشغيلة برصيد وزني موثق`
-                : `${weightBatchesCount} lots with verified weight`}
+              {weightBatchesCount} {lang === "ar" ? "تشغيلة موثقة" : "verified lots"}
             </span>
           </span>
 
           {unrecordedBatchesCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground border border-border/60">
-              <span className="shrink-0">⏳</span>
-              <span>
-                {lang === "ar"
-                  ? `${unrecordedBatchesCount} تشغيلات قيد جرد وتحديد الأوزان`
-                  : `${unrecordedBatchesCount} lots pending weight count`}
-              </span>
+            <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground font-semibold font-mono">
+              {unrecordedBatchesCount} {lang === "ar" ? "قيد الجرد" : "pending"}
             </span>
           )}
 
           {otherUnits.map((ou) => (
             <span
               key={ou.unit}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2.5 py-1 text-[11px] font-bold text-blue-900 dark:text-blue-300 border border-blue-500/20"
+              className="rounded-md bg-blue-500/10 px-2 py-0.5 text-blue-800 dark:text-blue-300 font-semibold font-mono"
             >
-              <span className="shrink-0">📦</span>
-              <span>
-                {ou.quantity.toLocaleString(lang === "ar" ? "ar-EG" : "en-US")} {ou.unit}
-              </span>
+              {ou.quantity.toLocaleString("en-US")} {ou.unit}
             </span>
           ))}
         </div>
