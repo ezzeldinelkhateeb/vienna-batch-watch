@@ -44,23 +44,25 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
         supabase.from("user_roles").select("user_id, role"),
       ]);
 
-      if (pErr) throw pErr;
-      if (rErr) throw rErr;
+      if (pErr) console.warn("Profiles query warning:", pErr);
+      if (rErr) console.warn("User roles query warning:", rErr);
 
       const rolesMap = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
-      const list: TeamMember[] = (profiles ?? []).map((p) => {
-        const rawRole = rolesMap.get(p.id);
-        let normalizedRole: UserRole = "quality";
-        if (rawRole === "admin") normalizedRole = "admin";
-        else if (rawRole === "view_only") normalizedRole = "view_only";
-        else normalizedRole = "quality"; // default & maps legacy member
+      const list: TeamMember[] = (profiles ?? [])
+        .filter((p) => Boolean(p && p.id))
+        .map((p) => {
+          const rawRole = rolesMap.get(p.id);
+          let normalizedRole: UserRole = "quality";
+          if (rawRole === "admin") normalizedRole = "admin";
+          else if (rawRole === "view_only") normalizedRole = "view_only";
+          else normalizedRole = "quality";
 
-        return {
-          id: p.id,
-          email: p.email,
-          role: normalizedRole,
-        };
-      });
+          return {
+            id: String(p.id),
+            email: p.email ? String(p.email) : null,
+            role: normalizedRole,
+          };
+        });
 
       setMembers(list);
     } catch (err) {
@@ -106,7 +108,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
 
         setEmail("");
         setPassword("");
-        setRole("member");
+        setRole("quality");
         setOpenAdd(false);
         void fetchMembers();
         return;
@@ -354,11 +356,13 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                 : "No users found"}
           </div>
         ) : (
-          members.map((m) => {
-            const isSelf = m.id === currentUserId;
+          members.map((m, idx) => {
+            const memberId = m?.id ? String(m.id) : "";
+            const isSelf = Boolean(memberId && currentUserId && memberId === currentUserId);
+            const displayName = m?.email || (memberId ? memberId.slice(0, 8) : (lang === "ar" ? "مستخدم" : "User"));
             return (
               <div
-                key={m.id}
+                key={memberId || `member-${idx}`}
                 className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm transition-colors hover:bg-muted/20"
               >
                 <div className="flex items-center gap-2.5">
@@ -379,7 +383,7 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
                   </div>
                   <div>
                     <div className="flex items-center gap-2 font-medium text-foreground">
-                      <span>{m.email || m.id.slice(0, 8)}</span>
+                      <span>{displayName}</span>
                       {isSelf && (
                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                           {lang === "ar" ? "أنت" : "You"}

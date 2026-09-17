@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 
 import { AdminSecurityHub } from "@/components/AdminSecurityHub";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 const BRAND_ICON_PRESETS = [
   { icon: "🏭", label: "مصنع Factory" },
@@ -1375,10 +1376,18 @@ export function AdminControlHub() {
       )}
 
       {/* Tab: Live Connected Users, Device Monitoring & Maintenance */}
-      {activeTab === "security" && <AdminSecurityHub />}
+      {activeTab === "security" && (
+        <AppErrorBoundary fallbackTitle={lang === "ar" ? "تعذر تحميل قسم المستخدمين المتصلين والصيانة" : "Failed to load Live Users & Security"}>
+          <AdminSecurityHub />
+        </AppErrorBoundary>
+      )}
 
       {/* Tab 6: System Audit Activity Log */}
-      {activeTab === "logs" && <AdminActivityLog />}
+      {activeTab === "logs" && (
+        <AppErrorBoundary fallbackTitle={lang === "ar" ? "تعذر تحميل سجل تدقيق العمليات" : "Failed to load Activity Log"}>
+          <AdminActivityLog />
+        </AppErrorBoundary>
+      )}
 
       {/* Button Create/Edit Dialog */}
       <Dialog open={buttonModalOpen} onOpenChange={setButtonModalOpen}>

@@ -37,6 +37,7 @@ import { TeamManagement } from "@/components/TeamManagement";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { BackupRestoreManager } from "@/components/BackupRestoreManager";
 import { AdminControlHub } from "@/components/AdminControlHub";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { logActivity } from "@/lib/activity-logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -832,13 +833,25 @@ function SettingsPage() {
         )}
 
         {/* Tab 3: Team Management */}
-        {activeTab === "team" && isAdmin && <TeamManagement currentUserId={session?.user?.id} />}
+        {activeTab === "team" && isAdmin && (
+          <AppErrorBoundary fallbackTitle={lang === "ar" ? "تعذر تحميل قسم إدارة الفريق والمستخدمين" : "Failed to load Team Management"}>
+            <TeamManagement currentUserId={session?.user?.id} />
+          </AppErrorBoundary>
+        )}
 
         {/* Tab 4: Smart Backup & Restore */}
-        {activeTab === "backup" && <BackupRestoreManager />}
+        {activeTab === "backup" && (
+          <AppErrorBoundary fallbackTitle={lang === "ar" ? "تعذر تحميل قسم النسخ الاحتياطي" : "Failed to load Backup Manager"}>
+            <BackupRestoreManager />
+          </AppErrorBoundary>
+        )}
 
         {/* Tab 5: Master Admin Control Hub */}
-        {activeTab === "admin_hub" && isAdmin && <AdminControlHub />}
+        {activeTab === "admin_hub" && isAdmin && (
+          <AppErrorBoundary fallbackTitle={lang === "ar" ? "تعذر تحميل لوحة تحكم المسؤول" : "Failed to load Admin Control Hub"}>
+            <AdminControlHub />
+          </AppErrorBoundary>
+        )}
 
         <WhatsAppShareDialog
           open={whatsAppDialogOpen}

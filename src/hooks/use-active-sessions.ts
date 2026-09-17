@@ -53,48 +53,68 @@ function parseClientDeviceInfo(): {
 
 export function getClientSessionId(): string {
   if (typeof window === "undefined") return "server_session";
-  let sid = sessionStorage.getItem("vienna_session_id");
-  if (!sid) {
-    sid = "sid_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-    sessionStorage.setItem("vienna_session_id", sid);
+  try {
+    let sid = sessionStorage.getItem("vienna_session_id");
+    if (!sid) {
+      sid = "sid_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+      sessionStorage.setItem("vienna_session_id", sid);
+    }
+    return sid;
+  } catch {
+    return "sid_fallback_" + Date.now();
   }
-  return sid;
 }
 
 const PRESENCE_ROOM = "vienna-presence-room";
 
-export function useActiveSessions() {
-  const { user, isAdmin } = useAuth();
-  const queryClient = useQueryClient();
-  const [sessions, setSessions] = useState<ActiveSession[]>([]);
-  const [activeCount, setActiveCount] = useState<number>(0);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+// --- Module-Level Singleton Presence State & Channel ---
+type SessionListener = (sessions: ActiveSession[]) => void;
+const listeners = new Set<SessionListener>();
+let globalSessions: ActiveSession[] = [];
+let singletonChannel: ReturnType<typeof supabase.channel> | null = null;
+let activeSubscriberCount = 0;
+let heartbeatInterval: any = null;
 
-  const mySessionId = getClientSessionId();
+function notifyListeners() {
+  const snapshot = [...globalSessions];
+  for (const listener of listeners) {
+    try {
+      listener(snapshot);
+    } catch (e) {
+      console.error("[ActiveSessions] Listener error:", e);
+    }
+  }
+}
 
-  // Helper to re-aggregate presence state
-  const syncPresenceState = useCallback((presenceState: Record<string, any[]>) => {
-    const list: ActiveSession[] = [];
-    const seen = new Set<string>();
+function processPresenceState(presenceState: Record<string, any[]>, mySessionId: string): ActiveSession[] {
+  if (!presenceState || typeof presenceState !== "object") {
+    return [];
+  }
 
+  const list: ActiveSession[] = [];
+  const seen = new Set<string>();
+
+  try {
     for (const key of Object.keys(presenceState)) {
-      const presences = presenceState[key] || [];
+      const presences = presenceState[key];
+      if (!Array.isArray(presences)) continue;
+
       for (const p of presences) {
-        if (!p || !p.sessionId) continue;
+        if (!p || typeof p !== "object" || !p.sessionId) continue;
         if (seen.has(p.sessionId)) continue;
         seen.add(p.sessionId);
 
         list.push({
-          sessionId: p.sessionId,
-          userId: p.userId,
-          email: p.email,
-          role: p.role || "qc_staff",
+          sessionId: String(p.sessionId),
+          userId: String(p.userId || ""),
+          email: String(p.email || "user@vienna.com"),
+          role: p.role === "admin" ? "admin" : "qc_staff",
           deviceType: p.deviceType || "desktop",
-          os: p.os || "Unknown",
-          browser: p.browser || "Browser",
-          currentPath: p.currentPath || "/",
-          onlineAt: p.onlineAt || new Date().toISOString(),
-          lastSeen: p.lastSeen || new Date().toISOString(),
+          os: String(p.os || "Unknown"),
+          browser: String(p.browser || "Browser"),
+          currentPath: String(p.currentPath || "/"),
+          onlineAt: String(p.onlineAt || new Date().toISOString()),
+          lastSeen: String(p.lastSeen || new Date().toISOString()),
           isCurrentDevice: p.sessionId === mySessionId,
         });
       }
@@ -104,105 +124,186 @@ export function useActiveSessions() {
     list.sort((a, b) => {
       if (a.isCurrentDevice) return -1;
       if (b.isCurrentDevice) return 1;
-      return new Date(b.onlineAt).getTime() - new Date(a.onlineAt).getTime();
+      const tA = new Date(a.onlineAt).getTime() || 0;
+      const tB = new Date(b.onlineAt).getTime() || 0;
+      return tB - tA;
     });
+  } catch (err) {
+    console.error("[ActiveSessions] processPresenceState error:", err);
+  }
 
-    setSessions(list);
-    setActiveCount(list.length);
-  }, [mySessionId]);
+  return list;
+}
 
-  useEffect(() => {
-    if (!user) return;
+export function useActiveSessions() {
+  const { user, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
+  const mySessionId = getClientSessionId();
 
-    const deviceInfo = parseClientDeviceInfo();
-    const onlineAt = new Date().toISOString();
-
-    const channel = supabase.channel(PRESENCE_ROOM, {
-      config: {
-        presence: {
-          key: mySessionId,
-        },
-      },
-    });
-
-    channelRef.current = channel;
-
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        syncPresenceState(state);
-      })
-      .on("presence", { event: "join" }, () => {
-        const state = channel.presenceState();
-        syncPresenceState(state);
-      })
-      .on("presence", { event: "leave" }, () => {
-        const state = channel.presenceState();
-        syncPresenceState(state);
-      })
-      .on("broadcast", { event: "FORCE_LOGOUT" }, async ({ payload }) => {
-        if (!payload) return;
-
-        const isTargetSession = payload.targetSessionId === mySessionId;
-        const isTargetUser = payload.targetUserId === user.id && !isAdmin;
-        const isKickAll = payload.kickAllOthers && mySessionId !== payload.initiatorSessionId && !isAdmin;
-
-        if (isTargetSession || isTargetUser || isKickAll) {
-          toast.error("تم إنهاء جلستك وإخراجك من المنظومة بواسطة مسؤول النظام 🔒", {
-            duration: 8000,
-          });
-          try {
-            await supabase.auth.signOut();
-          } finally {
-            if (typeof window !== "undefined") {
-              window.location.href = "/auth";
-            }
-          }
-        }
-      })
-      .on("broadcast", { event: "APP_LOCK_TOGGLE" }, () => {
-        void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({
-            sessionId: mySessionId,
-            userId: user.id,
-            email: user.email || "user@vienna.com",
-            role: isAdmin ? "admin" : "qc_staff",
-            deviceType: deviceInfo.deviceType,
-            os: deviceInfo.os,
-            browser: deviceInfo.browser,
-            currentPath: typeof window !== "undefined" ? window.location.pathname : "/",
-            onlineAt,
-            lastSeen: new Date().toISOString(),
-          });
-        }
-      });
-
-    // Periodic heartbeat to refresh presence
-    const interval = setInterval(() => {
-      if (channelRef.current && user) {
-        void channelRef.current.track({
+  const [sessions, setSessions] = useState<ActiveSession[]>(() => {
+    if (globalSessions.length > 0) return globalSessions;
+    if (user) {
+      const dev = parseClientDeviceInfo();
+      return [
+        {
           sessionId: mySessionId,
           userId: user.id,
           email: user.email || "user@vienna.com",
           role: isAdmin ? "admin" : "qc_staff",
-          deviceType: deviceInfo.deviceType,
-          os: deviceInfo.os,
-          browser: deviceInfo.browser,
+          deviceType: dev.deviceType,
+          os: dev.os,
+          browser: dev.browser,
           currentPath: typeof window !== "undefined" ? window.location.pathname : "/",
-          onlineAt,
+          onlineAt: new Date().toISOString(),
           lastSeen: new Date().toISOString(),
-        });
-      }
-    }, 45 * 1000);
+          isCurrentDevice: true,
+        },
+      ];
+    }
+    return [];
+  });
+
+  const [activeCount, setActiveCount] = useState<number>(sessions.length);
+
+  // Subscribe to module-level listener
+  useEffect(() => {
+    const handleUpdate = (updated: ActiveSession[]) => {
+      setSessions(updated);
+      setActiveCount(updated.length);
+    };
+
+    listeners.add(handleUpdate);
+    if (globalSessions.length > 0) {
+      handleUpdate(globalSessions);
+    }
 
     return () => {
-      clearInterval(interval);
-      void supabase.removeChannel(channel);
+      listeners.delete(handleUpdate);
     };
-  }, [user, isAdmin, mySessionId, syncPresenceState, queryClient]);
+  }, []);
+
+  // Manage singleton Realtime channel lifecycle
+  useEffect(() => {
+    if (!user) return;
+
+    activeSubscriberCount++;
+
+    const initSingleton = async () => {
+      if (!singletonChannel) {
+        try {
+          const deviceInfo = parseClientDeviceInfo();
+          const onlineAt = new Date().toISOString();
+
+          const channel = supabase.channel(PRESENCE_ROOM, {
+            config: {
+              presence: {
+                key: mySessionId,
+              },
+            },
+          });
+
+          singletonChannel = channel;
+
+          const sync = () => {
+            try {
+              if (singletonChannel) {
+                const state = singletonChannel.presenceState();
+                globalSessions = processPresenceState(state, mySessionId);
+                notifyListeners();
+              }
+            } catch (err) {
+              console.error("[ActiveSessions] sync error:", err);
+            }
+          };
+
+          channel
+            .on("presence", { event: "sync" }, sync)
+            .on("presence", { event: "join" }, sync)
+            .on("presence", { event: "leave" }, sync)
+            .on("broadcast", { event: "FORCE_LOGOUT" }, async ({ payload }) => {
+              if (!payload) return;
+
+              const isTargetSession = payload.targetSessionId === mySessionId;
+              const isTargetUser = payload.targetUserId === user.id && !isAdmin;
+              const isKickAll = payload.kickAllOthers && mySessionId !== payload.initiatorSessionId && !isAdmin;
+
+              if (isTargetSession || isTargetUser || isKickAll) {
+                toast.error("تم إنهاء جلستك وإخراجك من المنظومة بواسطة مسؤول النظام 🔒", {
+                  duration: 8000,
+                });
+                try {
+                  await supabase.auth.signOut();
+                } catch {
+                  // ignore
+                } finally {
+                  if (typeof window !== "undefined") {
+                    window.location.href = "/auth";
+                  }
+                }
+              }
+            })
+            .on("broadcast", { event: "APP_LOCK_TOGGLE" }, () => {
+              void queryClient.invalidateQueries({ queryKey: settingsQueryKey });
+            })
+            .subscribe(async (status) => {
+              if (status === "SUBSCRIBED" && singletonChannel) {
+                try {
+                  await singletonChannel.track({
+                    sessionId: mySessionId,
+                    userId: user.id,
+                    email: user.email || "user@vienna.com",
+                    role: isAdmin ? "admin" : "qc_staff",
+                    deviceType: deviceInfo.deviceType,
+                    os: deviceInfo.os,
+                    browser: deviceInfo.browser,
+                    currentPath: typeof window !== "undefined" ? window.location.pathname : "/",
+                    onlineAt,
+                    lastSeen: new Date().toISOString(),
+                  });
+                } catch (trackErr) {
+                  console.warn("[ActiveSessions] track error:", trackErr);
+                }
+              }
+            });
+
+          // Periodic heartbeat to refresh presence every 45s
+          if (!heartbeatInterval) {
+            heartbeatInterval = setInterval(() => {
+              if (singletonChannel && user) {
+                const currentDev = parseClientDeviceInfo();
+                singletonChannel
+                  .track({
+                    sessionId: mySessionId,
+                    userId: user.id,
+                    email: user.email || "user@vienna.com",
+                    role: isAdmin ? "admin" : "qc_staff",
+                    deviceType: currentDev.deviceType,
+                    os: currentDev.os,
+                    browser: currentDev.browser,
+                    currentPath: typeof window !== "undefined" ? window.location.pathname : "/",
+                    onlineAt,
+                    lastSeen: new Date().toISOString(),
+                  })
+                  .catch((e) => console.warn("[ActiveSessions] Heartbeat track error:", e));
+              }
+            }, 45 * 1000);
+          }
+        } catch (setupErr) {
+          console.error("[ActiveSessions] Channel setup error:", setupErr);
+        }
+      }
+    };
+
+    void initSingleton();
+
+    return () => {
+      activeSubscriberCount--;
+      // Keep channel alive for smooth navigation across tabs unless all subscribers unmount for extended time
+      if (activeSubscriberCount <= 0) {
+        activeSubscriberCount = 0;
+      }
+    };
+  }, [user, isAdmin, mySessionId, queryClient]);
 
   // Admin Kick action for a single session
   const kickSession = async (targetSessionId: string, targetEmail?: string) => {
@@ -216,7 +317,7 @@ export function useActiveSessions() {
     }
 
     try {
-      const channel = channelRef.current || supabase.channel(PRESENCE_ROOM);
+      const channel = singletonChannel || supabase.channel(PRESENCE_ROOM);
       await channel.send({
         type: "broadcast",
         event: "FORCE_LOGOUT",
@@ -227,9 +328,9 @@ export function useActiveSessions() {
         },
       });
 
-      // Optimistically filter from local state
-      setSessions((prev) => prev.filter((s) => s.sessionId !== targetSessionId));
-      setActiveCount((prev) => Math.max(0, prev - 1));
+      // Optimistically update
+      globalSessions = globalSessions.filter((s) => s.sessionId !== targetSessionId);
+      notifyListeners();
 
       toast.success(
         targetEmail
@@ -250,7 +351,7 @@ export function useActiveSessions() {
     }
 
     try {
-      const channel = channelRef.current || supabase.channel(PRESENCE_ROOM);
+      const channel = singletonChannel || supabase.channel(PRESENCE_ROOM);
       await channel.send({
         type: "broadcast",
         event: "FORCE_LOGOUT",
@@ -262,8 +363,8 @@ export function useActiveSessions() {
       });
 
       // Filter out everyone except current device
-      setSessions((prev) => prev.filter((s) => s.isCurrentDevice));
-      setActiveCount(1);
+      globalSessions = globalSessions.filter((s) => s.isCurrentDevice);
+      notifyListeners();
 
       toast.success("تم إنهاء جلسات جميع المستخدمين وإخراجهم بنجاح 🔒");
     } catch (err) {
@@ -275,7 +376,7 @@ export function useActiveSessions() {
   // Broadcast app lock change to all clients
   const broadcastAppLock = async (isLocked: boolean) => {
     try {
-      const channel = channelRef.current || supabase.channel(PRESENCE_ROOM);
+      const channel = singletonChannel || supabase.channel(PRESENCE_ROOM);
       await channel.send({
         type: "broadcast",
         event: "APP_LOCK_TOGGLE",

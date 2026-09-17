@@ -7,6 +7,7 @@ import { MaintenanceLockedScreen } from "@/components/MaintenanceLockedScreen";
 import { AppLockBanner } from "@/components/AppLockBanner";
 import { useAndroidBack } from "@/hooks/use-android-back";
 import { useActiveSessions } from "@/hooks/use-active-sessions";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -72,7 +73,9 @@ function AuthenticatedLayout() {
   return (
     <div className="relative min-h-screen">
       <AppLockBanner isLocked={isLocked} />
-      <Outlet />
+      <AppErrorBoundary fallbackTitle="تعذر تحميل محتوى هذه الصفحة">
+        <Outlet />
+      </AppErrorBoundary>
     </div>
   );
 }

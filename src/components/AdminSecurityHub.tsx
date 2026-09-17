@@ -185,45 +185,52 @@ export function AdminSecurityHub() {
           </div>
         ) : (
           <div className="divide-y divide-border/60">
-            {sessions.map((s) => (
-              <div
-                key={s.sessionId}
-                className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 first:pt-0 last:pb-0"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="size-9 rounded-xl bg-muted/70 flex items-center justify-center shrink-0 border border-border/80">
-                    {getDeviceIcon(s.deviceType)}
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-foreground font-mono">
-                        {s.email}
-                      </span>
-                      {s.isCurrentDevice ? (
-                        <span className="rounded-md bg-brand/10 text-brand border border-brand/20 px-2 py-0.2 text-[10px] font-bold">
-                          {lang === "ar" ? "أنت (هذا الجهاز)" : "This Device"}
+            {sessions.map((s, idx) => {
+              const sid = s?.sessionId ? String(s.sessionId) : `session-${idx}`;
+              const sEmail = s?.email || "user@vienna.com";
+              const sOs = s?.os || "OS";
+              const sBrowser = s?.browser || "Browser";
+              const sPath = s?.currentPath || "/";
+              const sType = s?.deviceType || "desktop";
+              return (
+                <div
+                  key={sid}
+                  className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="size-9 rounded-xl bg-muted/70 flex items-center justify-center shrink-0 border border-border/80">
+                      {getDeviceIcon(sType)}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-foreground font-mono">
+                          {sEmail}
                         </span>
-                      ) : null}
-                      <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-semibold text-muted-foreground">
-                        {s.role === "admin" ? (lang === "ar" ? "مسؤول" : "Admin") : (lang === "ar" ? "فني جودة" : "QC Staff")}
-                      </span>
-                    </div>
+                        {s?.isCurrentDevice ? (
+                          <span className="rounded-md bg-brand/10 text-brand border border-brand/20 px-2 py-0.2 text-[10px] font-bold">
+                            {lang === "ar" ? "أنت (هذا الجهاز)" : "This Device"}
+                          </span>
+                        ) : null}
+                        <span className="rounded-md bg-muted px-1.5 py-0.2 text-[10px] font-semibold text-muted-foreground">
+                          {s?.role === "admin" ? (lang === "ar" ? "مسؤول" : "Admin") : (lang === "ar" ? "فني جودة" : "QC Staff")}
+                        </span>
+                      </div>
 
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground font-mono">
-                      <span>{s.os} • {s.browser}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Globe className="size-3" />
-                        <span>{s.currentPath === "/" ? (lang === "ar" ? "المخزون" : "Inventory") : s.currentPath}</span>
-                      </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3" />
-                        <span>{formatOnlineSince(s.onlineAt)}</span>
-                      </span>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground font-mono">
+                        <span>{sOs} • {sBrowser}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Globe className="size-3" />
+                          <span>{sPath === "/" ? (lang === "ar" ? "المخزون" : "Inventory") : sPath}</span>
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="size-3" />
+                          <span>{formatOnlineSince(s?.onlineAt || "")}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
                 <div className="flex items-center gap-2 self-end sm:self-center">
                   {!s.isCurrentDevice ? (
@@ -249,7 +256,8 @@ export function AdminSecurityHub() {
                   )}
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -38,50 +38,82 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+  console.error("[TanStack Root ErrorComponent]:", error);
   const router = useRouter();
+  const [showDetails, setShowDetails] = useState(false);
+
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
-    const msg = error?.message?.toLowerCase() || "";
-    if (
-      msg.includes("auth") ||
-      msg.includes("jwt") ||
-      msg.includes("token") ||
-      msg.includes("session") ||
-      msg.includes("email logins are disabled") ||
-      msg.includes("email_provider_disabled")
-    ) {
-      if (typeof window !== "undefined") {
-        window.location.href = "/auth";
-      }
-    }
   }, [error]);
 
+  const handleRefresh = () => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  };
+
+  const handleGoHome = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground" dir="rtl">
+      <div className="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 text-center shadow-lg">
+        <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600">
+          <span className="text-2xl">⚠️</span>
+        </div>
+
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+          تعذر تحميل هذه الصفحة مؤقتاً
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+        <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
+          حدث خطأ غير متوقع أثناء معالجة البيانات. بياناتك وجلستك محفوظة بأمان، ويمكنك إعادة المحاولة أو العودة للرئيسية فوراً دون الحاجة لمسح الكاش.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button
+            type="button"
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-xs sm:text-sm font-semibold text-brand-foreground shadow-xs transition-all hover:bg-brand/90"
           >
-            Try again
+            إعادة المحاولة / Try again
           </button>
-          <a
-            href="/auth"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-card px-4 py-2 text-sm font-medium text-cocoa transition-colors hover:bg-accent"
+          <button
+            type="button"
+            onClick={handleGoHome}
+            className="inline-flex items-center justify-center rounded-lg border border-input bg-card px-4 py-2 text-xs sm:text-sm font-semibold text-cocoa transition-all hover:bg-accent"
           >
-            تسجيل الدخول / Login
-          </a>
+            الرئيسية / Home
+          </button>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="inline-flex items-center justify-center rounded-lg border border-input bg-card px-4 py-2 text-xs sm:text-sm font-semibold text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+          >
+            تحديث / Refresh
+          </button>
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-border/60">
+          <button
+            type="button"
+            onClick={() => setShowDetails((prev) => !prev)}
+            className="text-[11px] text-muted-foreground hover:text-foreground underline"
+          >
+            {showDetails ? "إخفاء التفاصيل التقنية" : "عرض تفاصيل الخطأ الفنية"}
+          </button>
+
+          {showDetails && (
+            <div className="mt-2 text-start rounded-lg bg-muted/60 p-3 font-mono text-[11px] text-destructive border border-border/80 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto" dir="ltr">
+              <div className="font-bold">{error?.message || "Unknown error"}</div>
+              {error?.stack && <div className="mt-1 text-[10px] text-muted-foreground">{error.stack}</div>}
+            </div>
+          )}
         </div>
       </div>
     </div>
