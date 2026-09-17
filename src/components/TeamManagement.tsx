@@ -89,13 +89,14 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
 
     setCreating(true);
     try {
-      // 1. Primary method: Direct Database RPC function (Zero emails, Zero rate limits, Instant confirmation)
+      // Use valid enum value for DB RPC (quality maps to member if DB enum has not expanded)
+      const dbRole = role === "admin" ? "admin" : role === "view_only" ? "view_only" : "member";
       const { data: rpcUserId, error: rpcError } = await supabase.rpc(
         "create_team_member" as never,
         {
           _email: email.trim().toLowerCase(),
           _password: password,
-          _role: role,
+          _role: dbRole,
         } as never,
       );
 
@@ -147,10 +148,16 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
 
       const newUserId = authResult.user?.id;
       if (newUserId) {
-        await supabase.from("user_roles").upsert({
+        const { error: upsertErr } = await supabase.from("user_roles").upsert({
           user_id: newUserId,
           role: role,
         });
+        if (upsertErr && role === "quality") {
+          await supabase.from("user_roles").upsert({
+            user_id: newUserId,
+            role: "member" as never,
+          });
+        }
       }
 
       toast.success(
@@ -188,10 +195,17 @@ export function TeamManagement({ currentUserId }: { currentUserId?: string | und
     }
 
     try {
-      const { error } = await supabase.from("user_roles").upsert({
+      let { error } = await supabase.from("user_roles").upsert({
         user_id: member.id,
         role: newRole,
       });
+      if (error && newRole === "quality") {
+        const fallback = await supabase.from("user_roles").upsert({
+          user_id: member.id,
+          role: "member" as never,
+        });
+        error = fallback.error;
+      }
       if (error) throw error;
 
       toast.success(

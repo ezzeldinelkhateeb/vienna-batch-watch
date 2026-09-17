@@ -60,6 +60,7 @@ const en: Dict = {
   legendExpired: "past the expiry date",
 
   monthsDaysLeft: "{m} months and {d} days left ({n} days)",
+  monthsOnlyLeft: "{m} months left ({n} days)",
   daysLeft: "{n} days left",
   todayExpires: "Expires today",
   expiredAgo: "Expired {n} days ago",
@@ -415,6 +416,7 @@ const ar: Dict = {
   legendExpired: "تجاوز تاريخ الانتهاء",
 
   monthsDaysLeft: "متبقٍ {m} شهر و{d} يوم ({n} يوم)",
+  monthsOnlyLeft: "متبقٍ {m} شهر ({n} يوم)",
   daysLeft: "متبقٍ {n} يوم",
   todayExpires: "ينتهي اليوم",
   expiredAgo: "انتهى منذ {n} يوم",

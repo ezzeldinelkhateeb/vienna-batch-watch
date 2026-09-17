@@ -112,7 +112,7 @@ function InventoryPage() {
   const canExport = isAdmin || settings.data?.feature_flags.allow_export_non_admin !== false;
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | Status | "urgent">("all");
   const [qcFilter, setQcFilter] = useState<"all" | QcStatusType>("all");
   const [fefoOnly, setFefoOnly] = useState(false);
   const [multiBatchOnly, setMultiBatchOnly] = useState(false);
@@ -434,6 +434,47 @@ function InventoryPage() {
     setStorageFilter("all");
   };
 
+  const applyExclusiveFilter = (
+    type: "status" | "qc" | "fefo" | "multiBatch",
+    value?: Status | "urgent" | QcStatusType
+  ) => {
+    let isCurrentlyActive = false;
+    if (type === "status") {
+      isCurrentlyActive = statusFilter === value;
+    } else if (type === "qc") {
+      isCurrentlyActive = qcFilter === value && !fefoOnly;
+    } else if (type === "fefo") {
+      isCurrentlyActive = fefoOnly;
+    } else if (type === "multiBatch") {
+      isCurrentlyActive = multiBatchOnly;
+    }
+
+    // 1. Wipe out old filters completely first
+    setSearch("");
+    setStatusFilter("all");
+    setQcFilter("all");
+    setFefoOnly(false);
+    setMultiBatchOnly(false);
+    setStorageFilter("all");
+
+    // 2. If it was already active, toggle off (stay reset to all)
+    if (isCurrentlyActive) {
+      return;
+    }
+
+    // 3. Apply ONLY the new filter
+    if (type === "status" && value) {
+      setStatusFilter(value as Status | "urgent");
+    } else if (type === "qc" && value) {
+      setQcFilter(value as QcStatusType);
+    } else if (type === "fefo") {
+      setFefoOnly(true);
+      setQcFilter("approved");
+    } else if (type === "multiBatch") {
+      setMultiBatchOnly(true);
+    }
+  };
+
   const rows = useMemo(() => {
     const list = (items.data ?? []).map((item) => {
       const days = daysUntil(item.expiry_date);
@@ -446,7 +487,13 @@ function InventoryPage() {
 
     // 1. Filter
     const filtered = list.filter((r) => {
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (statusFilter !== "all") {
+        if (statusFilter === "urgent") {
+          if (r.status !== "critical" && r.status !== "expired") return false;
+        } else if (r.status !== statusFilter) {
+          return false;
+        }
+      }
       if (qcFilter !== "all" && (r.item.qc_status ?? "quarantine") !== qcFilter) return false;
       if (fefoOnly && !r.isFefoFirst) return false;
       if (multiBatchOnly && r.materialBatchCount <= 1) return false;
@@ -635,7 +682,7 @@ function InventoryPage() {
                 size="sm"
                 variant="outline"
                 className="bg-white hover:bg-white/90 text-red-700 border-red-300 text-xs font-semibold shrink-0 shadow-sm"
-                onClick={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
+                onClick={() => applyExclusiveFilter("status", "urgent")}
               >
                 {t("viewUrgentItems")}
               </Button>
@@ -658,21 +705,15 @@ function InventoryPage() {
             unrecordedBatchesCount={kpis.unrecordedBatchesCount}
             otherUnits={kpis.otherUnits}
             hasActiveFilters={hasActiveFilters}
-            isUrgentActive={statusFilter === "critical" || statusFilter === "expired"}
+            isUrgentActive={statusFilter === "urgent" || statusFilter === "critical" || statusFilter === "expired"}
             isMultiBatchActive={multiBatchOnly}
             isApprovedActive={qcFilter === "approved" && !fefoOnly}
             isQuarantineActive={qcFilter === "quarantine" && !fefoOnly}
             onFilterReset={resetAllFilters}
-            onFilterUrgent={() => setStatusFilter(counts.expired > 0 ? "expired" : "critical")}
-            onFilterMultiBatch={() => setMultiBatchOnly((prev) => !prev)}
-            onFilterApproved={() => {
-              setQcFilter(qcFilter === "approved" && !fefoOnly ? "all" : "approved");
-              setFefoOnly(false);
-            }}
-            onFilterQuarantine={() => {
-              setQcFilter(qcFilter === "quarantine" && !fefoOnly ? "all" : "quarantine");
-              setFefoOnly(false);
-            }}
+            onFilterUrgent={() => applyExclusiveFilter("status", "urgent")}
+            onFilterMultiBatch={() => applyExclusiveFilter("multiBatch")}
+            onFilterApproved={() => applyExclusiveFilter("qc", "approved")}
+            onFilterQuarantine={() => applyExclusiveFilter("qc", "quarantine")}
           />
         )}
 
@@ -710,12 +751,9 @@ function InventoryPage() {
               {/* 2. Rejection / Waste Rate */}
               <button
                 type="button"
-                onClick={() => {
-                  setQcFilter(qcFilter === "rejected" ? "all" : "rejected");
-                  setFefoOnly(false);
-                }}
+                onClick={() => applyExclusiveFilter("qc", "rejected")}
                 className={`flex items-center justify-between gap-3 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors text-right pt-2 sm:pt-1.5 ${
-                  qcFilter === "rejected" ? "ring-1 ring-destructive/40 bg-destructive/5" : ""
+                  qcFilter === "rejected" && !fefoOnly ? "ring-1 ring-destructive/40 bg-destructive/5" : ""
                 }`}
                 title="فلترة التشغيلات المرفوضة"
               >
@@ -841,7 +879,7 @@ function InventoryPage() {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             type="button"
-            onClick={() => setStatusFilter("all")}
+            onClick={resetAllFilters}
             className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
               statusFilter === "all"
                 ? "bg-brand text-brand-foreground shadow-xs ring-1 ring-brand"
@@ -852,7 +890,7 @@ function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === "normal" ? "all" : "normal")}
+            onClick={() => applyExclusiveFilter("status", "normal")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
               statusFilter === "normal"
                 ? "bg-emerald-600 text-white shadow-xs"
@@ -865,7 +903,7 @@ function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === "early" ? "all" : "early")}
+            onClick={() => applyExclusiveFilter("status", "early")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
               statusFilter === "early"
                 ? "bg-amber-600 text-white shadow-xs"
@@ -878,7 +916,7 @@ function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === "medium" ? "all" : "medium")}
+            onClick={() => applyExclusiveFilter("status", "medium")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
               statusFilter === "medium"
                 ? "bg-orange-600 text-white shadow-xs"
@@ -891,7 +929,7 @@ function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === "critical" ? "all" : "critical")}
+            onClick={() => applyExclusiveFilter("status", "critical")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
               statusFilter === "critical"
                 ? "bg-rose-600 text-white shadow-xs"
@@ -904,7 +942,7 @@ function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setStatusFilter(statusFilter === "expired" ? "all" : "expired")}
+            onClick={() => applyExclusiveFilter("status", "expired")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1.5 ${
               statusFilter === "expired"
                 ? "bg-zinc-700 text-white shadow-xs"
@@ -918,7 +956,13 @@ function InventoryPage() {
         </div>
 
         {/* Color Legend Card (دليل الألوان) */}
-        {thresholds && <StatusLegend thresholds={thresholds} />}
+        {thresholds && (
+          <StatusLegend
+            thresholds={thresholds}
+            selectedStatus={statusFilter}
+            onSelectStatus={(s) => applyExclusiveFilter("status", s)}
+          />
+        )}
 
         {/* Secondary Filters Bar: All, Multi-Batch, FEFO */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1">
@@ -936,7 +980,7 @@ function InventoryPage() {
 
           <button
             type="button"
-            onClick={() => setMultiBatchOnly(!multiBatchOnly)}
+            onClick={() => applyExclusiveFilter("multiBatch")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
               multiBatchOnly
                 ? "bg-purple-600 text-white shadow-xs"
@@ -950,10 +994,7 @@ function InventoryPage() {
 
           <button
             type="button"
-            onClick={() => {
-              setFefoOnly(!fefoOnly);
-              if (!fefoOnly) setQcFilter("approved");
-            }}
+            onClick={() => applyExclusiveFilter("fefo")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold transition-all flex items-center gap-1 ${
               fefoOnly
                 ? "bg-amber-500 text-amber-950 ring-2 ring-amber-400 shadow-sm"
@@ -967,10 +1008,7 @@ function InventoryPage() {
 
           <button
             type="button"
-            onClick={() => {
-              setQcFilter(qcFilter === "quarantine" ? "all" : "quarantine");
-              setFefoOnly(false);
-            }}
+            onClick={() => applyExclusiveFilter("qc", "quarantine")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
               qcFilter === "quarantine" && !fefoOnly
                 ? "bg-amber-600 text-white shadow-xs"
@@ -984,10 +1022,7 @@ function InventoryPage() {
 
           <button
             type="button"
-            onClick={() => {
-              setQcFilter(qcFilter === "approved" ? "all" : "approved");
-              setFefoOnly(false);
-            }}
+            onClick={() => applyExclusiveFilter("qc", "approved")}
             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
               qcFilter === "approved" && !fefoOnly
                 ? "bg-emerald-600 text-white shadow-xs"
@@ -1002,10 +1037,7 @@ function InventoryPage() {
           {qcCounts.rejected > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setQcFilter(qcFilter === "rejected" ? "all" : "rejected");
-                setFefoOnly(false);
-              }}
+              onClick={() => applyExclusiveFilter("qc", "rejected")}
               className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-all flex items-center gap-1 ${
                 qcFilter === "rejected" && !fefoOnly
                   ? "bg-rose-600 text-white shadow-xs"
@@ -1284,8 +1316,17 @@ function InventoryPage() {
                             {item.expiry_date}
                           </span>
                           <span
-                            className="block text-[10px] font-bold mt-0.5"
-                            style={{ color: STATUS_TINT[status] }}
+                            className={`inline-block text-[11px] font-bold mt-1 px-1.5 py-0.5 rounded leading-tight ${
+                              status === "expired"
+                                ? "bg-red-500/15 text-red-700 dark:text-red-300 ring-1 ring-red-500/30"
+                                : status === "critical"
+                                  ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/30"
+                                  : status === "medium"
+                                    ? "bg-orange-500/15 text-orange-800 dark:text-orange-300 ring-1 ring-orange-500/30"
+                                    : status === "early"
+                                      ? "bg-amber-500/15 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30"
+                                      : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
+                            }`}
                           >
                             {countdownText(days, t)}
                           </span>
@@ -1538,7 +1579,23 @@ function InventoryPage() {
                         </td>
                         <td className="px-3 py-2">{item.production_date || "—"}</td>
                         <td className="px-3 py-2">{item.expiry_date}</td>
-                        <td className="px-3 py-2">{countdownText(days, t)}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-block text-[11px] font-bold px-1.5 py-0.5 rounded leading-tight ${
+                              status === "expired"
+                                ? "bg-red-500/15 text-red-700 dark:text-red-300 ring-1 ring-red-500/30"
+                                : status === "critical"
+                                  ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/30"
+                                  : status === "medium"
+                                    ? "bg-orange-500/15 text-orange-800 dark:text-orange-300 ring-1 ring-orange-500/30"
+                                    : status === "early"
+                                      ? "bg-amber-500/15 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30"
+                                      : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30"
+                            }`}
+                          >
+                            {countdownText(days, t)}
+                          </span>
+                        </td>
                         <td className="max-w-[16rem] px-3 py-2 text-xs">
                           {item.qc_notes ? (
                             <span className="text-cocoa font-medium block truncate" title={item.qc_notes}>

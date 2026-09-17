@@ -371,15 +371,27 @@ export function ItemFormDialog({
       toast.success(t("saved"));
       onSaved();
       onOpenChange(false);
-    } catch (err) {
+    } catch (err: unknown) {
       for (const p of newlyUploadedPaths) {
         await deleteItemPhoto(p);
       }
-      const code = (err as { code?: string } | null)?.code;
-      const msg = err instanceof Error ? err.message : "";
-      if (code === "23505" || msg.includes("items_item_code_unique")) {
+      console.error("[ItemFormDialog] Submit failed:", err);
+      const errObj = err as { code?: string; message?: string; details?: string; hint?: string } | null;
+      const code = errObj?.code;
+      const msg =
+        errObj?.message ||
+        (err instanceof Error ? err.message : "") ||
+        "";
+
+      if (code === "23505" || msg.includes("items_item_code_unique") || msg.includes("duplicate key")) {
         setCodeError(t("errDuplicateCode"));
         toast.error(t("errDuplicateCode"));
+      } else if (code === "42501" || msg.includes("violates row-level security policy") || msg.includes("permission denied")) {
+        toast.error(
+          lang === "ar"
+            ? "ليس لديك صلاحية لإضافة أو تعديل الأصناف (صلاحية مشاهد فقط أو التطبيق في وضع الصيانة)."
+            : "You do not have permission to modify inventory items (View-only role or App is locked)."
+        );
       } else {
         toast.error(msg || t("errGeneric"));
       }

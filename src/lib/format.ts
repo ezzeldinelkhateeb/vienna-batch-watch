@@ -25,6 +25,7 @@ export function countdownText(days: number, tOrLang?: T | Lang | string): string
   const months = Math.floor(days / 30);
   const rest = days % 30;
   if (months === 0) return resolve("daysLeft", { n: days });
+  if (rest === 0) return resolve("monthsOnlyLeft", { m: months, n: days });
   return resolve("monthsDaysLeft", { m: months, d: rest, n: days });
 }
 
