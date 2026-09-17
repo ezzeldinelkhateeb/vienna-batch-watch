@@ -33,17 +33,12 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 function createSupabaseAdminClient() {
-  const SUPABASE_URL =
-    process.env["SUPABASE_URL"] ||
-    process.env["VITE_SUPABASE_URL"] ||
-    "https://ayhnzvvogzetsznfqxql.supabase.co";
-  const SUPABASE_SERVICE_ROLE_KEY =
-    process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5aG56dnZvZ3pldHN6bmZxeHFsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODgxNDk2NSwiZXhwIjoyMTA0MzkwOTY1fQ.wBTrXcLlevdZlq7YJpKxBmdbVLfxn_G3UMCFZTMRLdY";
+  const SUPABASE_URL = process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"];
+  const SUPABASE_SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
+      ...(!SUPABASE_URL ? ["SUPABASE_URL / VITE_SUPABASE_URL"] : []),
       ...(!SUPABASE_SERVICE_ROLE_KEY ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
     ];
     const message = `مفتاح السيرفر (${missing.join(", ")}) غير موجود في إعدادات Vercel. يرجى نسخ مفتاح service_role من لوحة تحكم Supabase (Project Settings > API) وإضافته كـ SUPABASE_SERVICE_ROLE_KEY في إعدادات Vercel (Settings > Environment Variables).`;
