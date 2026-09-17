@@ -1,15 +1,18 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, Package, Settings as SettingsIcon, Languages, ClipboardCheck, ShieldAlert } from "lucide-react";
+import { Bell, LogOut, Package, Settings as SettingsIcon, Languages, ClipboardCheck, ShieldAlert, Menu } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useSettings } from "@/hooks/use-settings";
+import { useNavigationDrawer } from "@/hooks/use-navigation-drawer";
+import { AppNavigationDrawer } from "@/components/AppNavigationDrawer";
 import { Button } from "@/components/ui/button";
 
 export function AppHeader({ showNav = true }: { showNav?: boolean }) {
   const { t, toggle, lang } = useI18n();
   const navigate = useNavigate();
   const settings = useSettings();
+  const { openDrawer } = useNavigationDrawer();
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -67,6 +70,21 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
         </Link>
 
         <div className="flex items-center gap-1.5 sm:gap-2 ms-auto">
+          {/* 3-line Hamburger Menu Drawer Button */}
+          {showNav && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={openDrawer}
+              className="text-cream hover:bg-white/20 bg-white/10 border border-white/20 text-xs sm:text-sm font-bold gap-1.5 px-2.5 sm:px-3 shadow-xs"
+              title={lang === "ar" ? "قائمة أقسام الموقع الشاملة" : "All Sections Menu"}
+            >
+              <Menu className="size-5 stroke-[2.5]" />
+              <span className="hidden sm:inline">{lang === "ar" ? "الأقسام" : "Menu"}</span>
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="sm"
@@ -74,7 +92,7 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
             className="text-cream hover:bg-white/10 text-xs sm:text-sm font-medium"
           >
             <Languages className="size-4" />
-            <span>{t("language")}</span>
+            <span className="hidden sm:inline">{t("language")}</span>
           </Button>
 
           {showNav && (
@@ -141,6 +159,7 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
           )}
         </div>
       </div>
+      <AppNavigationDrawer />
     </header>
   );
 }

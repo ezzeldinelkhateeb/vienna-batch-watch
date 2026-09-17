@@ -156,6 +156,26 @@ function InventoryPage() {
     }
   };
 
+  useEffect(() => {
+    const handleViennaAction = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail === "add-item") {
+        setEditing(null);
+        setDialogOpen(true);
+      } else if (detail === "scan") {
+        setScannerOpen(true);
+      } else if (detail === "print-report") {
+        setPrintOpen(true);
+      } else if (detail === "backup") {
+        setBackupOpen(true);
+      } else if (detail === "export-csv") {
+        exportCsv();
+      }
+    };
+    window.addEventListener("vienna:action", handleViennaAction);
+    return () => window.removeEventListener("vienna:action", handleViennaAction);
+  }, [rows]);
+
   const items = useQuery({
     queryKey: ["items"],
     queryFn: async () => {
@@ -547,26 +567,6 @@ function InventoryPage() {
           />
         )}
 
-        {/* Expiry Status Metric Cards */}
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label={t("totalItems")}
-            value={items.data?.length ?? 0}
-            active={statusFilter === "all" && qcFilter === "all" && !multiBatchOnly && storageFilter === "all"}
-            onClick={resetAllFilters}
-          />
-          {STATUS_ORDER.map((s) => (
-            <StatCard
-              key={s}
-              label={t(STATUS_LABEL_KEY[s])}
-              value={counts[s]}
-              tint={STATUS_TINT[s]}
-              active={statusFilter === s}
-              onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-            />
-          ))}
-        </div>
-
         {thresholds && <StatusLegend thresholds={thresholds} />}
 
         {/* Quick Filter Pills for Instant Mobile & Fast Filtering */}
@@ -758,35 +758,6 @@ function InventoryPage() {
                 </SelectContent>
               </Select>
             )}
-
-            {/* Status Filter */}
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | Status)}>
-              <SelectTrigger className="w-36 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allStatuses")}</SelectItem>
-                {STATUS_ORDER.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {t(STATUS_LABEL_KEY[s])}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* QC Status Filter */}
-            <Select value={qcFilter} onValueChange={(v) => setQcFilter(v as "all" | QcStatusType)}>
-              <SelectTrigger className="w-36 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allQcStatuses")}</SelectItem>
-                <SelectItem value="quarantine">🔒 {t("quarantine")}</SelectItem>
-                <SelectItem value="approved">✅ {t("approved")}</SelectItem>
-                <SelectItem value="rejected">❌ {t("rejected")}</SelectItem>
-                <SelectItem value="conditional">⚠️ {t("conditional")}</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Action Buttons & View Modes */}
@@ -963,26 +934,44 @@ function InventoryPage() {
                         {isFefoFirst && <FefoBadge />}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2.5 text-xs">
                         <div>
-                          <span className="text-muted-foreground block">{t("expiryDate")}</span>
-                          <span className="font-medium font-mono text-foreground">
-                            {item.expiry_date}
+                          <span className="text-[11px] text-muted-foreground block font-medium">
+                            {t("productionDate")}
                           </span>
-                          <span className="block text-[10px] text-muted-foreground">
-                            {countdownText(days, t)}
+                          <span className="font-mono text-foreground font-semibold">
+                            {item.production_date || "—"}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground block">{t("quantity")}</span>
-                          <span className="font-medium font-mono text-foreground">
-                            {item.quantity != null ? `${item.quantity} ${item.unit ?? ""}` : "—"}
+                          <span className="text-[11px] text-muted-foreground block font-medium">
+                            {t("expiryDate")}
                           </span>
-                          {item.storage_location && (
-                            <span className="block text-[10px] text-muted-foreground truncate">
-                              📍 {item.storage_location}
-                            </span>
-                          )}
+                          <span className="font-mono text-foreground font-semibold">
+                            {item.expiry_date}
+                          </span>
+                          <span
+                            className="block text-[10px] font-bold mt-0.5"
+                            style={{ color: STATUS_TINT[status] }}
+                          >
+                            {countdownText(days, t)}
+                          </span>
+                        </div>
+                        <div className="pt-1.5 border-t border-border/50">
+                          <span className="text-[11px] text-muted-foreground block font-medium">
+                            {t("quantity")}
+                          </span>
+                          <span className="font-bold font-mono text-foreground text-sm">
+                            {item.quantity != null ? `${item.quantity.toLocaleString()} ${item.unit ?? ""}` : "—"}
+                          </span>
+                        </div>
+                        <div className="pt-1.5 border-t border-border/50">
+                          <span className="text-[11px] text-muted-foreground block font-medium">
+                            {t("storageLocation")}
+                          </span>
+                          <span className="font-medium text-foreground truncate block text-xs" title={item.storage_location || ""}>
+                            📍 {item.storage_location || "—"}
+                          </span>
                         </div>
                       </div>
 
@@ -1217,8 +1206,18 @@ function InventoryPage() {
                         <td className="px-3 py-2">{item.production_date || "—"}</td>
                         <td className="px-3 py-2">{item.expiry_date}</td>
                         <td className="px-3 py-2">{countdownText(days, t)}</td>
-                        <td className="max-w-[16rem] px-3 py-2 text-muted-foreground">
-                          {item.notes || "—"}
+                        <td className="max-w-[16rem] px-3 py-2 text-xs">
+                          {item.qc_notes ? (
+                            <span className="text-cocoa font-medium block truncate" title={item.qc_notes}>
+                              🔬 {item.qc_notes}
+                            </span>
+                          ) : item.notes ? (
+                            <span className="text-muted-foreground truncate block" title={item.notes}>
+                              {item.notes}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex gap-1">
