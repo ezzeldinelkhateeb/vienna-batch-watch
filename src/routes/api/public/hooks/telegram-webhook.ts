@@ -2,44 +2,111 @@ import { createFileRoute } from "@tanstack/react-router";
 import { sendTelegram, sendTelegramPhoto, answerTelegramCallback } from "@/lib/telegram.server";
 import { daysUntil, statusFor, DEFAULT_THRESHOLDS } from "@/lib/status";
 import { parsePhotos } from "@/lib/photos";
+import { generateMorningBriefing, generateLowStockReport } from "@/lib/telegram-reports.server";
+
+interface TelegramMessage {
+  message_id: number;
+  from?: { id: number; first_name?: string; username?: string };
+  chat: { id: number | string; title?: string; type: string };
+  date: number;
+  text?: string;
+  caption?: string;
+}
 
 interface TelegramUpdate {
   update_id: number;
-  message?: {
-    message_id: number;
-    from?: { id: number; first_name?: string; username?: string };
-    chat: { id: number | string; title?: string; type: string };
-    date: number;
-    text?: string;
-  };
+  message?: TelegramMessage;
+  edited_message?: TelegramMessage;
+  channel_post?: TelegramMessage;
   callback_query?: {
     id: string;
-    from: { id: number; first_name?: string };
-    message?: {
-      message_id: number;
-      chat: { id: number | string };
-    };
+    from: { id: number; first_name?: string; username?: string };
+    message?: TelegramMessage;
     data?: string;
   };
 }
 
-// Persistent 1-tap Reply Keyboard
+// Persistent 1-tap Reply Keyboard (Always active at the bottom of the chat)
 const MAIN_KEYBOARD = {
   keyboard: [
     [{ text: "📊 تقرير المخزون" }, { text: "🚨 الخامات الحرجة" }],
     [{ text: "🥇 أولوية الصرف (FEFO)" }, { text: "🔒 شحنات الحجر (QC)" }],
+    [{ text: "🌅 نشرة وردية الصباح" }, { text: "📉 كشف النواقص" }],
     [{ text: "⚡ فحص الصلاحية الآن" }, { text: "ℹ️ قائمة الأوامر والمساعدة" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
 };
 
+// Keyword banks for single-word / short colloquial queries
+const FEFO_KEYWORDS = [
+  "صرف", "الصرف", "اصرف", "سحب", "السحب", "فيفو", "ففو", "fefo",
+  "اولويه", "أولوية", "اولويات", "أولويات", "اولويه الصرف", "اولويات الصرف",
+  "تشغيل", "التشغيل", "انتاج", "الإنتاج", "ترتيب الصرف", "مين عليه الدور", "اصرف ايه", "مين عليه"
+];
+
+const URGENT_KEYWORDS = [
+  "حرج", "حرجه", "حرجة", "الحرج", "الحرجه", "الحرجة", "طوارئ", "طواري",
+  "الطوارئ", "خطر", "الخطر", "قريب", "القريب", "وشيك", "الوشيك", "ينتهي",
+  "هينتهي", "هيبوظ", "باظ", "تحذير", "تنبيه", "تنبيهات", "انذار", "إنذار", "urgent", "expiring"
+];
+
+const EXPIRED_KEYWORDS = [
+  "منتهي", "منتهيه", "منتهية", "المنتهي", "المنتهيه", "المنتهية",
+  "اكسباير", "اكسبايرد", "expired", "تالف", "التالف", "هالك", "الهالك",
+  "توالف", "التوالف", "بايظ", "بايظه", "باظت"
+];
+
+const QC_KEYWORDS = [
+  "حجر", "الحجر", "محجوز", "المحجوز", "معلق", "المعلق", "كواليتي",
+  "الجودة", "الجوده", "جودة", "جوده", "عينات", "العينات", "تحت الفحص",
+  "موقف الجودة", "موقف الجوده", "qc", "quarantine"
+];
+
+const REJECTED_KEYWORDS = [
+  "مرفوض", "مرفوضه", "مرفوضة", "المرفوض", "المرفوضه", "المرفوضة",
+  "مرفوضات", "المرفوضات", "رفض", "الرفض", "rejected"
+];
+
+const STATUS_KEYWORDS = [
+  "تقرير", "التقرير", "مخزون", "المخزون", "مخزن", "المخزن", "رصيد", "الرصيد",
+  "احصائيات", "الاحصائيات", "كام صنف", "كام خامه", "كام خامة", "حاله المخزن",
+  "وضع المخزن", "رصيد المخزن", "ملخص", "status", "summary", "stats", "report"
+];
+
+const MORNING_KEYWORDS = [
+  "صباح", "الصباح", "صباح الخير", "صباحك", "نشره", "نشرة", "النشرة", "النشره",
+  "نشرة الصباح", "نشره الصباح", "تقرير الصباح", "وردية", "ورديه", "الوردية", "الورديه",
+  "وردية الصباح", "الوردية الصباحية", "morning", "briefing", "shift"
+];
+
+const LOWSTOCK_KEYWORDS = [
+  "نواقص", "النواقص", "ناقص", "نقص", "النقص", "منخفض", "المنخفض", "رصيد منخفض",
+  "رصيد قليل", "قليل", "اعادة طلب", "إعادة طلب", "طلب خامات", "شراء", "المشتريات",
+  "lowstock", "reorder"
+];
+
+const CHECK_KEYWORDS = [
+  "فحص", "الفحص", "شيك", "افحص", "ابعت التنبيهات", "شغل الفحص", "تحديث الصلاحية", "check"
+];
+
+const HELP_KEYWORDS = [
+  "مساعده", "مساعدة", "المساعدة", "المساعده", "اوامر", "أوامر", "الاوامر", "الأوامر",
+  "القائمه", "القائمة", "قائمة", "قائمه", "مين انت", "من انت", "دليل", "تعليمات",
+  "ازاي استخدمك", "سلام", "السلام", "مرحبا", "اهلا", "أهلا", "مساء الخير",
+  "يا بوت", "help", "menu", "start"
+];
+
 export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
   server: {
     handlers: {
       GET: async () => {
         return new Response(
-          JSON.stringify({ status: "active", service: "Vienna Smart AI Telegram Bot Engine v3.0" }),
+          JSON.stringify({
+            status: "active",
+            service: "Vienna Smart AI Telegram Bot Engine v5.0 (Deep NLU & Smart Options)",
+            timestamp: new Date().toISOString(),
+          }),
           { headers: { "content-type": "application/json" } },
         );
       },
@@ -56,11 +123,18 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
           if (body.callback_query) {
             isCallback = true;
             callbackId = body.callback_query.id;
-            chatId = body.callback_query.message ? String(body.callback_query.message.chat.id) : null;
-            rawText = body.callback_query.data || "";
-          } else if (body.message?.text) {
-            chatId = String(body.message.chat.id);
-            rawText = body.message.text.trim();
+            chatId = body.callback_query.message
+              ? String(body.callback_query.message.chat.id)
+              : body.callback_query.from
+                ? String(body.callback_query.from.id)
+                : null;
+            rawText = (body.callback_query.data || "").trim();
+          } else {
+            const msg = body.message || body.channel_post || body.edited_message;
+            if (msg) {
+              chatId = String(msg.chat.id);
+              rawText = (msg.text || msg.caption || "").trim();
+            }
           }
 
           if (!chatId || !rawText) {
@@ -84,9 +158,9 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
             });
           }
 
-          // Acknowledge callback query immediately
+          // Acknowledge callback query immediately to dismiss the button loading spinner!
           if (isCallback && callbackId) {
-            void answerTelegramCallback(botToken, callbackId);
+            await answerTelegramCallback(botToken, callbackId, "جارٍ المعالجة... ⚡");
           }
 
           const thresholds = {
@@ -95,15 +169,15 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
             critical: settings?.threshold_critical ?? DEFAULT_THRESHOLDS.critical,
           };
 
-          // Clean command text
-          const splitFirst = (rawText.split("@")[0] || rawText).trim();
-          const cleanCmd = splitFirst.trim();
-          const firstWord = (cleanCmd.split(" ")[0] || "").toLowerCase();
+          // Clean command text (strip bot mentions like @vienna_bot cleanly)
+          const cleanCmd = rawText.replace(/@\w+/g, "").trim();
+          const firstWord = (cleanCmd.split(/\s+/)[0] || "").toLowerCase();
 
-          // Normalized Arabic for intent matching
+          // Normalized Arabic for intelligent intent matching
           const normalized = cleanCmd
             .replace(/[إأآ]/g, "ا")
             .replace(/ة/g, "ه")
+            .replace(/[ًٌٍَُِّْ]/g, "")
             .toLowerCase();
 
           let replyText = "";
@@ -111,44 +185,594 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
           let inlineKeyboard: any = null;
 
           // ==========================================
-          // 1. HELP & START
+          // ACTION ROUTE A: ITEM DRILLDOWN VIA BUTTON (item:<id>)
           // ==========================================
-          if (
+          if (cleanCmd.startsWith("item:")) {
+            const itemId = cleanCmd.replace(/^item:/, "").trim();
+            const { data: item } = await supabaseAdmin
+              .from("items")
+              .select("*")
+              .eq("id", itemId)
+              .maybeSingle();
+
+            if (!item) {
+              replyText = "⚠️ عذراً، لم يتم العثور على بيانات هذه التشغيلة (قد تكون حذفت أو تم تعديلها).";
+            } else {
+              const days = daysUntil(item.expiry_date);
+              const st = statusFor(days, thresholds);
+
+              // Check FEFO priority for this material
+              const { data: siblingBatches } = await supabaseAdmin
+                .from("items")
+                .select("id, expiry_date, batch_number")
+                .eq("name", item.name)
+                .eq("qc_status", "approved")
+                .order("expiry_date", { ascending: true })
+                .limit(1);
+
+              const isFefoPriority = Boolean(siblingBatches && siblingBatches[0]?.id === item.id);
+              const report = buildSingleItemReportCard(item, days, st, isFefoPriority);
+              replyText = report.text;
+
+              if (item.photo_path) {
+                const photos = parsePhotos(item.photo_path);
+                if (photos[0]?.path) {
+                  const { data: signed } = await supabaseAdmin.storage
+                    .from("item-photos")
+                    .createSignedUrl(photos[0].path, 3600);
+                  if (signed?.signedUrl) {
+                    photoUrlToSend = signed.signedUrl;
+                  }
+                }
+              }
+
+              // Build interactive buttons: Quick Actions row + Drilldown navigation row
+              const itemButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+              const qc = item.qc_status ?? "quarantine";
+              const currentStock = Number(item.quantity) || 0;
+
+              // Row 1: Immediate Decisions / Operational Actions
+              if (qc === "quarantine") {
+                itemButtons.push([
+                  { text: "✅ فك الحجر واعتماد", callback_data: `qc_act:approved:${item.id}` },
+                  { text: "❌ رفض التشغيلة", callback_data: `qc_act:rejected:${item.id}` },
+                ]);
+              } else if (qc === "approved") {
+                const actionRow: Array<{ text: string; callback_data: string }> = [];
+                if (currentStock > 0) {
+                  actionRow.push({ text: "🏭 صرف لخط الإنتاج", callback_data: `dispense_prompt:${item.id}` });
+                }
+                actionRow.push({ text: "🔒 إعادة للحجر", callback_data: `qc_act:quarantine:${item.id}` });
+                itemButtons.push(actionRow);
+              } else if (qc === "rejected") {
+                itemButtons.push([
+                  { text: "🔄 إعادة فحص بالحجر", callback_data: `qc_act:quarantine:${item.id}` },
+                ]);
+              }
+
+              // Row 2 & 3: Navigation & Global Reports
+              itemButtons.push([
+                { text: `📦 كل دفعات (${item.name.slice(0, 14)})`, callback_data: `mat:${item.name}` },
+                { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+              ]);
+              itemButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: itemButtons };
+            }
+          }
+
+          // ==========================================
+          // ACTION ROUTE B: MATERIAL BATCHES VIA BUTTON (mat:<name>)
+          // ==========================================
+          else if (cleanCmd.startsWith("mat:")) {
+            const materialName = cleanCmd.replace(/^mat:/, "").trim();
+            const { data: matched } = await supabaseAdmin
+              .from("items")
+              .select("*")
+              .ilike("name", `%${materialName}%`)
+              .order("expiry_date", { ascending: true });
+
+            const results = matched ?? [];
+            if (results.length === 0) {
+              replyText = `ℹ️ لا توجد تشغيلات مسجلة حالياً للخامة: *"${materialName}"*.`;
+            } else {
+              const lines = [
+                `🍫 *كافة تشغيلات خامة (${materialName}) بالمخزن:*`,
+                `_(إجمالي: ${results.length} تشغيلة — مرتبة بأولوية الصرف FEFO)_`,
+                "━━━━━━━━━━━━━━━━━━━━━━━━━",
+              ];
+
+              const buttonsRow: Array<Array<{ text: string; callback_data: string }>> = [];
+
+              let idx = 1;
+              for (const item of results) {
+                const days = daysUntil(item.expiry_date);
+                const cdText = days < 0 ? `⛔ منتهي منذ ${Math.abs(days)} يوم` : `⏳ متبقٍ ${days} يوم`;
+                const qcLabel =
+                  item.qc_status === "approved"
+                    ? "✅ معتمد"
+                    : item.qc_status === "rejected"
+                      ? "❌ مرفوض"
+                      : "🔒 حجر";
+
+                const fefoBadge = idx === 1 && item.qc_status === "approved" ? " 🥇 [أولوية #1]" : "";
+
+                lines.push(
+                  `${idx}. 📦 *تشغيلة #${item.batch_number || item.item_code || "—"}*${fefoBadge}`,
+                  `   • الرصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "المخزن العام"}`,
+                  `   • الصلاحية: *${item.expiry_date}* (${cdText}) | ${qcLabel}\n`,
+                );
+
+                const label = `🔍 تشغيلة #${(item.batch_number || item.item_code || String(idx)).slice(0, 14)}`;
+                buttonsRow.push([{ text: label, callback_data: `item:${item.id}` }]);
+                idx++;
+              }
+
+              buttonsRow.push([
+                { text: "🥇 أولوية الصرف العامة", callback_data: "/fefo" },
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+              ]);
+
+              replyText = lines.join("\n");
+              inlineKeyboard = { inline_keyboard: buttonsRow.slice(0, 8) };
+            }
+          }
+
+          // ==========================================
+          // ACTION ROUTE C: ALL BATCHES COMBINED (allbatches:<name>)
+          // ==========================================
+          else if (cleanCmd.startsWith("allbatches:")) {
+            const searchTerm = cleanCmd.replace(/^allbatches:/, "").trim();
+            const variants = generateSearchVariants(searchTerm);
+            const orFilters = variants
+              .map((v) => `name.ilike.%${v}%,batch_number.ilike.%${v}%,item_code.ilike.%${v}%`)
+              .join(",");
+
+            const { data: matched } = await supabaseAdmin
+              .from("items")
+              .select("*")
+              .or(orFilters)
+              .order("expiry_date", { ascending: true })
+              .limit(25);
+
+            const results = matched ?? [];
+            if (results.length === 0) {
+              replyText = `ℹ️ لا توجد تشغيلات مسجلة حالياً لـ *"${searchTerm}"*.`;
+            } else {
+              const lines = [
+                `📋 *كافة تشغيلات "${searchTerm}" بالمخزن (${results.length} تشغيلة):*`,
+                "_(مرتبة بأولوية الصرف بالصلاحية FEFO)_",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━",
+              ];
+
+              const buttonsRow: Array<Array<{ text: string; callback_data: string }>> = [];
+              let idx = 1;
+              for (const item of results.slice(0, 10)) {
+                const days = daysUntil(item.expiry_date);
+                const cdText = days < 0 ? `⛔ منتهي منذ ${Math.abs(days)} يوم` : `⏳ متبقٍ ${days} يوم`;
+                const qcLabel =
+                  item.qc_status === "approved"
+                    ? "✅ معتمد"
+                    : item.qc_status === "rejected"
+                      ? "❌ مرفوض"
+                      : "🔒 حجر";
+
+                const fefoTag = idx === 1 && item.qc_status === "approved" ? " 🥇 [أولوية #1]" : "";
+
+                lines.push(
+                  `${idx}. 📦 *${item.name}*${fefoTag}`,
+                  `   • تشغيلة: \`#${item.batch_number || "—"}\` | كود: \`${item.item_code || "—"}\``,
+                  `   • الرصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "—"}`,
+                  `   • الصلاحية: *${item.expiry_date}* (${cdText}) | ${qcLabel}\n`,
+                );
+
+                buttonsRow.push([
+                  {
+                    text: `🔍 فحص تشغيلة #${(item.batch_number || item.item_code || String(idx)).slice(0, 14)}`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
+                idx++;
+              }
+
+              if (results.length > 10) {
+                lines.push(`_... ويوجد ${results.length - 10} تشغيلة أخرى مسجلة._`);
+              }
+
+              lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 اضغط على زر أي تشغيلة أدناه لعرض بطاقة الجودة والموقع بالكامل:");
+              replyText = lines.join("\n");
+
+              buttonsRow.push([
+                { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: buttonsRow.slice(0, 8) };
+            }
+          }
+
+          // ==========================================
+          // ACTION ROUTE D: QC STATUS CHANGE (qc_act:<status>:<id>)
+          // ==========================================
+          else if (cleanCmd.startsWith("qc_act:")) {
+            const parts = cleanCmd.split(":");
+            const targetStatus = parts[1] as "approved" | "rejected" | "quarantine";
+            const targetId = parts[2]?.trim();
+
+            if (!targetId || !["approved", "rejected", "quarantine"].includes(targetStatus)) {
+              replyText = "⚠️ أمر تعديل حالة الجودة غير مكتمل.";
+            } else {
+              const { data: item } = await supabaseAdmin
+                .from("items")
+                .select("id, name, batch_number, qc_status, qc_notes, quantity, unit")
+                .eq("id", targetId)
+                .maybeSingle();
+
+              if (!item) {
+                replyText = "⚠️ تعذر العثور على التشغيلة لتعديل قرار الجودة.";
+              } else {
+                const fromUser = body.callback_query?.from;
+                const actorName = fromUser?.first_name
+                  ? `${fromUser.first_name}${fromUser.username ? ` (@${fromUser.username})` : ""}`
+                  : "بوت تليجرام";
+
+                const arabicStatus =
+                  targetStatus === "approved"
+                    ? "اعتماد وفك الحجر"
+                    : targetStatus === "rejected"
+                      ? "رفض وتجنيب"
+                      : "تحويل إلى الحجر المؤقت";
+
+                const dateStr = new Date().toLocaleDateString("ar-EG");
+                const newNote = `[${dateStr}] تم ${arabicStatus} عبر تليجرام بواسطة ${actorName}`;
+                const combinedNotes = item.qc_notes ? `${item.qc_notes}\n${newNote}` : newNote;
+
+                const { error: updateErr } = await supabaseAdmin
+                  .from("items")
+                  .update({
+                    qc_status: targetStatus,
+                    qc_inspected_at: new Date().toISOString(),
+                    qc_inspected_by: `Telegram: ${actorName}`,
+                    qc_notes: combinedNotes,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", targetId);
+
+                if (updateErr) {
+                  replyText = `❌ فشل تحديث حالة التشغيلة: ${updateErr.message}`;
+                } else {
+                  if (targetStatus === "approved") {
+                    replyText =
+                      `✅ *تم بنجاح اعتماد وفك الحجر عن التشغيلة!* 🎉\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `📦 *الخامة:* *${item.name}*\n` +
+                      `🔢 *التشغيلة:* \`#${item.batch_number || "—"}\`\n` +
+                      `⚖️ *الرصيد المتاح:* *${item.quantity ?? "—"} ${item.unit ?? "كجم"}*\n` +
+                      `👤 *المسؤول المعتمد:* ${actorName}\n` +
+                      `⏰ *التوقيت:* ${new Date().toLocaleTimeString("ar-EG")}\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `_أصبحت التشغيلة الآن معتمدة وجاهزة للصرف لخطوط الإنتاج والتصنيع._`;
+
+                    inlineKeyboard = {
+                      inline_keyboard: [
+                        [
+                          { text: "🔍 فحص التشغيلة المعتمدة", callback_data: `item:${item.id}` },
+                          ...(Number(item.quantity) > 0
+                            ? [{ text: "🏭 صرف للإنتاج الآن", callback_data: `dispense_prompt:${item.id}` }]
+                            : []),
+                        ],
+                        [
+                          { text: `📦 كل دفعات (${item.name.slice(0, 14)})`, callback_data: `mat:${item.name}` },
+                          { text: "🔒 شحنات الحجر المتبقية", callback_data: "/qc" },
+                        ],
+                        [
+                          { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                          { text: "📊 تقرير المخزون", callback_data: "/status" },
+                        ],
+                      ],
+                    };
+                  } else if (targetStatus === "rejected") {
+                    replyText =
+                      `⛔ *تم رفض التشغيلة وتجنيبها من الصرف والتصنيع!*\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `📦 *الخامة:* *${item.name}*\n` +
+                      `🔢 *التشغيلة:* \`#${item.batch_number || "—"}\`\n` +
+                      `👤 *المسؤول القائم بالرفض:* ${actorName}\n` +
+                      `⏰ *التوقيت:* ${new Date().toLocaleTimeString("ar-EG")}\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `_تم تصنيف التشغيلة رسمياً كمرفوضة وتجنيبها لحين اتخاذ قرار الإعدام أو الإرجاع للمورد._`;
+
+                    inlineKeyboard = {
+                      inline_keyboard: [
+                        [
+                          { text: "🔍 بطاقة التشغيلة", callback_data: `item:${item.id}` },
+                          { text: "❌ كشف المرفوضات", callback_data: "/rejected" },
+                        ],
+                        [
+                          { text: "🔒 شحنات الحجر", callback_data: "/qc" },
+                          { text: "📊 تقرير المخزون", callback_data: "/status" },
+                        ],
+                      ],
+                    };
+                  } else {
+                    replyText =
+                      `🔒 *تم تحويل التشغيلة إلى منطقة الحجر الصحي (Quarantine)*\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `📦 *الخامة:* *${item.name}*\n` +
+                      `🔢 *التشغيلة:* \`#${item.batch_number || "—"}\`\n` +
+                      `👤 *بواسطة:* ${actorName}\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `_التشغيلة محجوزة بانتظار سحب العينات وفحص الجودة._`;
+
+                    inlineKeyboard = {
+                      inline_keyboard: [
+                        [{ text: "🔍 فحص التشغيلة", callback_data: `item:${item.id}` }],
+                        [{ text: "🔒 شحنات الحجر", callback_data: "/qc" }],
+                      ],
+                    };
+                  }
+                }
+              }
+            }
+          }
+
+          // ==========================================
+          // ACTION ROUTE E: DISPENSE PROMPT (dispense_prompt:<id>)
+          // ==========================================
+          else if (cleanCmd.startsWith("dispense_prompt:")) {
+            const targetId = cleanCmd.replace(/^dispense_prompt:/, "").trim();
+            const { data: item } = await supabaseAdmin
+              .from("items")
+              .select("id, name, batch_number, quantity, unit, storage_location, qc_status")
+              .eq("id", targetId)
+              .maybeSingle();
+
+            if (!item) {
+              replyText = "⚠️ تعذر العثور على التشغيلة لبدء عملية الصرف.";
+            } else {
+              const currentQty = Number(item.quantity) || 0;
+              const unit = item.unit || "كجم";
+
+              if (currentQty <= 0) {
+                replyText = `⚠️ رصيد تشغيلة *${item.name}* (\`#${item.batch_number || "—"}\`) هو 0 ${unit} بالفعل؛ لا توجد كمية قابلة للصرف.`;
+                inlineKeyboard = {
+                  inline_keyboard: [
+                    [{ text: "🔙 رجوع لبطاقة التشغيلة", callback_data: `item:${item.id}` }],
+                  ],
+                };
+              } else {
+                const qtyHalf = Math.round(currentQty * 0.5 * 100) / 100;
+                const qtyQuarter = Math.round(currentQty * 0.25 * 100) / 100;
+
+                replyText =
+                  `🏭 *تسجيل صرف سريع لخط الإنتاج والتصنيع*\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `📦 *الخامة:* *${item.name}*\n` +
+                  `🔢 *التشغيلة:* \`#${item.batch_number || "—"}\`\n` +
+                  `⚖️ *الرصيد الحالي بالمخزن:* *${currentQty} ${unit}*\n` +
+                  `📍 *موقع التخزين:* ${item.storage_location || "المخزن العام"}\n\n` +
+                  `اختر الكمية المراد خصمها وصرفها فوراً للتشغيل:`;
+
+                const dispenseRows: Array<Array<{ text: string; callback_data: string }>> = [
+                  [
+                    {
+                      text: `⚡ صرف كامل الرصيد (${currentQty} ${unit})`,
+                      callback_data: `dispense_exec:${item.id}:all`,
+                    },
+                  ],
+                ];
+
+                if (qtyHalf > 0 && qtyHalf < currentQty) {
+                  dispenseRows.push([
+                    {
+                      text: `⚖️ صرف نصف الكمية (${qtyHalf} ${unit})`,
+                      callback_data: `dispense_exec:${item.id}:half`,
+                    },
+                  ]);
+                }
+
+                if (qtyQuarter > 0 && qtyQuarter < qtyHalf) {
+                  dispenseRows.push([
+                    {
+                      text: `🧪 صرف ربع الكمية (${qtyQuarter} ${unit})`,
+                      callback_data: `dispense_exec:${item.id}:quarter`,
+                    },
+                  ]);
+                }
+
+                dispenseRows.push([
+                  { text: "🔙 إلغاء والرجوع", callback_data: `item:${item.id}` },
+                ]);
+
+                inlineKeyboard = { inline_keyboard: dispenseRows };
+              }
+            }
+          }
+
+          // ==========================================
+          // ACTION ROUTE F: DISPENSE EXECUTION (dispense_exec:<id>:<ratio>)
+          // ==========================================
+          else if (cleanCmd.startsWith("dispense_exec:")) {
+            const parts = cleanCmd.split(":");
+            const targetId = parts[1]?.trim();
+            const ratio = parts[2]?.trim();
+
+            const { data: item } = await supabaseAdmin
+              .from("items")
+              .select("id, name, batch_number, quantity, unit, storage_location")
+              .eq("id", targetId)
+              .maybeSingle();
+
+            if (!item) {
+              replyText = "⚠️ تعذر العثور على التشغيلة لتنفيذ الصرف.";
+            } else {
+              const currentQty = Number(item.quantity) || 0;
+              const unit = item.unit || "كجم";
+
+              let qtyToDispense = 0;
+              if (ratio === "all") {
+                qtyToDispense = currentQty;
+              } else if (ratio === "half") {
+                qtyToDispense = Math.round(currentQty * 0.5 * 100) / 100;
+              } else if (ratio === "quarter") {
+                qtyToDispense = Math.round(currentQty * 0.25 * 100) / 100;
+              } else {
+                qtyToDispense = parseFloat(ratio || "0") || 0;
+              }
+
+              if (qtyToDispense <= 0 || qtyToDispense > currentQty) {
+                replyText = `⚠️ الكمية المطلوب صرفها (${qtyToDispense} ${unit}) غير صحيحة أو تتجاوز الرصيد الحالي (${currentQty} ${unit}).`;
+                inlineKeyboard = {
+                  inline_keyboard: [
+                    [{ text: "🔙 رجوع لبطاقة التشغيلة", callback_data: `item:${item.id}` }],
+                  ],
+                };
+              } else {
+                const remainingQty = Math.max(0, Math.round((currentQty - qtyToDispense) * 100) / 100);
+
+                // 1. Update items table
+                const { error: updateErr } = await supabaseAdmin
+                  .from("items")
+                  .update({
+                    quantity: remainingQty,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", item.id);
+
+                if (updateErr) {
+                  replyText = `❌ فشل تحديث الرصيد: ${updateErr.message}`;
+                } else {
+                  // 2. Insert into stock_movements
+                  const fromUser = body.callback_query?.from;
+                  const actorName = fromUser?.first_name
+                    ? `${fromUser.first_name}${fromUser.username ? ` (@${fromUser.username})` : ""}`
+                    : "بوت تليجرام";
+
+                  await supabaseAdmin.from("stock_movements").insert({
+                    item_id: item.id,
+                    item_name: item.name,
+                    batch_number: item.batch_number || null,
+                    movement_type: "production_dispense",
+                    quantity_dispensed: qtyToDispense,
+                    unit: unit,
+                    previous_quantity: currentQty,
+                    remaining_quantity: remainingQty,
+                    production_line: "صرف إنتاج (أزرار تليجرام السريعة)",
+                    recipient_name: actorName,
+                    notes: "تم تسجيل الصرف بنقرة واحدة عبر تليجرام",
+                  });
+
+                  replyText =
+                    `🏭 *تم بنجاح تسجيل صرف الخامات للإنتاج!* ✨\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `📦 *الخامة:* *${item.name}*\n` +
+                    `🔢 *التشغيلة:* \`#${item.batch_number || "—"}\`\n` +
+                    `➖ *الكمية المصروفة:* *${qtyToDispense} ${unit}*\n` +
+                    `📊 *الرصيد المتبقي بالمخزن:* *${remainingQty} ${unit}*\n` +
+                    `👤 *القائم بالصرف:* ${actorName}\n` +
+                    `⏰ *التوقيت:* ${new Date().toLocaleTimeString("ar-EG")}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `_تم خصم الكمية من المخزون وتوثيق حركة في سجل حركات المخزن فوراً._`;
+
+                  inlineKeyboard = {
+                    inline_keyboard: [
+                      [{ text: "🔍 فحص رصيد التشغيلة الآن", callback_data: `item:${item.id}` }],
+                      [{ text: `📦 كل دفعات (${item.name.slice(0, 14)})`, callback_data: `mat:${item.name}` }],
+                      [{ text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" }],
+                      [{ text: "📊 تقرير المخزون", callback_data: "/status" }],
+                    ],
+                  };
+                }
+              }
+            }
+          }
+
+          // ==========================================
+          // MORNING SHIFT BRIEFING (/morning)
+          // ==========================================
+          else if (
+            firstWord === "/morning" ||
+            rawText === "🌅 نشرة وردية الصباح" ||
+            matchesAnyKeyword(normalized, MORNING_KEYWORDS)
+          ) {
+            const { data: allItems } = await supabaseAdmin
+              .from("items")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status, supplier")
+              .order("expiry_date", { ascending: true });
+
+            const briefing = generateMorningBriefing(allItems || [], thresholds);
+            replyText = briefing.text;
+            inlineKeyboard = briefing.reply_markup;
+          }
+
+          // ==========================================
+          // LOW STOCK / REORDER ALERT (/lowstock)
+          // ==========================================
+          else if (
+            firstWord === "/lowstock" ||
+            rawText === "📉 كشف النواقص" ||
+            matchesAnyKeyword(normalized, LOWSTOCK_KEYWORDS)
+          ) {
+            const { data: allItems } = await supabaseAdmin
+              .from("items")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status, supplier")
+              .order("expiry_date", { ascending: true });
+
+            const lowStock = generateLowStockReport(allItems || []);
+            replyText = lowStock.text;
+            inlineKeyboard = lowStock.reply_markup;
+          }
+
+          // ==========================================
+          // 1. HELP & START & GREETINGS
+          // ==========================================
+          else if (
             firstWord === "/start" ||
             firstWord === "/help" ||
             firstWord === "/menu" ||
             rawText === "ℹ️ قائمة الأوامر والمساعدة" ||
-            normalized === "مساعده" ||
-            normalized === "اوامر" ||
-            normalized === "القائمه" ||
-            normalized.includes("من انت")
+            matchesAnyKeyword(normalized, HELP_KEYWORDS)
           ) {
             replyText =
               "🍫 *مرحباً بك في بوت الجودة والتشغيل الذكي — مصنع فيينا* 🍫\n" +
-              "Vienna Biscuit & Chocolate Factory — AI Bot v3.0\n" +
+              "Vienna Biscuit & Chocolate Factory — AI Bot v5.0\n" +
               "━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-              "أنا أتعرف تلقائياً على *رقم التشغيلة (Batch Number)*، أو *كود الصنف*، أو *اسم الخامة*، وأرسل لك التقرير الفوري الشامل!\n\n" +
-              "✨ *قدرات البحث الذكي المتطورة:*\n" +
-              "• *ارسل رقم تشغيلة واحد* (مثال: `B-101` أو `تشغيلة 504`) ⬅️ يعرض بطاقة الجودة والموقع والصور.\n" +
-              "• *ارسل عدة تشغيلات معاً* (مثال: `B-101, B-202, B-303` أو كل تشغيلة في سطر) ⬅️ يعرض تقرير مقارن فوري لكافة التشغيلات في رد واحد!\n" +
-              "• *ارسل اسم أي خامة* (مثال: `كاكاو`، `سكر`، `فانيليا`) ⬅️ يعرض كل دفعاتها بالمخزن مرتبة حسب الأقرب انتهاءً.\n\n" +
-              "🔘 *الأوامر السريعة:*\n" +
+              "أنا مساعدك الذكي لإدارة المخزون وفحص الصلاحيات والجودة. يمكنك كتابة أي كلمة مفردة أو سؤال وسأفهم طلبك فوراً:\n\n" +
+              "✨ *القدرات الذكية والإجراءات الفورية:*\n" +
+              "• *ارسل كلمة مفردة* (مثال: `كاكاو`، `سكر`) ⬅️ إذا كانت الكلمة مشتركة في عدة أصناف، أعرض لك خيارات تفاعلية بنقرة واحدة!\n" +
+              "• *ارسل رقم تشغيلة* (مثال: `B-101`) ⬅️ يعرض بطاقة الفحص الشاملة مع أزرار فورية لـ (فك الحجر - الرفض - الصرف للإنتاج).\n" +
+              "• *إجراءات فورية بالأزرار*: اعتماد وفك الحجر أو صرف الكميات لخط الإنتاج بنقرة زر دون فتح المتصفح!\n\n" +
+              "🔘 *الأوامر السريعة في تليجرام:*\n" +
+              "🌅 */morning* — نشرة وردية الصباح وخطة خامات اليوم\n" +
+              "📉 */lowstock* — كشف النواقص والأصناف قاربت على النفاد\n" +
               "📊 */status* — ملخص شامل للمخزون والصلاحيات\n" +
               "🚨 */urgent* — الخامات الحرجة والمنتهية فوراً\n" +
-              "🥇 */fefo* — أولوية الصرف للإنتاج والتصنيع\n" +
+              "🥇 */fefo* — أولوية الصرف لخطوط التصنيع\n" +
               "🔒 */qc* — شحنات الحجر وبانتظار اعتماد الجودة\n" +
-              "⛔ */expired* — كشف الخامات المنتهية الصلاحية فقط\n" +
+              "⛔ */expired* — كشف الخامات المنتهية الصلاحية\n" +
+              "❌ */rejected* — كشف الخامات المرفوضة والتوالف\n" +
               "⚡ */check* — تشغيل فحص فوري وإرسال التنبيهات الآن";
 
             inlineKeyboard = {
               inline_keyboard: [
+                [
+                  { text: "🌅 نشرة وردية الصباح", callback_data: "/morning" },
+                  { text: "📉 كشف النواقص", callback_data: "/lowstock" },
+                ],
                 [
                   { text: "📊 تقرير المخزون", callback_data: "/status" },
                   { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
                 ],
                 [
                   { text: "🥇 أولوية الصرف (FEFO)", callback_data: "/fefo" },
-                  { text: "🔒 شحنات الحجر", callback_data: "/qc" },
+                  { text: "🔒 شحنات الحجر (QC)", callback_data: "/qc" },
+                ],
+                [
+                  { text: "⛔ المنتهية فقط", callback_data: "/expired" },
+                  { text: "⚡ فحص الصلاحية الآن", callback_data: "/check" },
                 ],
               ],
             };
@@ -160,12 +784,7 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
           else if (
             firstWord === "/fefo" ||
             rawText === "🥇 أولوية الصرف (FEFO)" ||
-            normalized === "صرف" ||
-            normalized === "فيفو" ||
-            normalized.includes("اولويه الصرف") ||
-            normalized.includes("اولويات الصرف") ||
-            normalized.includes("اصرف ايه") ||
-            normalized.includes("مين عليه الدور")
+            matchesAnyKeyword(normalized, FEFO_KEYWORDS)
           ) {
             const { data: items } = await supabaseAdmin
               .from("items")
@@ -176,7 +795,7 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
             const validItems = (items ?? []).filter((i) => daysUntil(i.expiry_date) >= 0);
 
             // Group by material name and take earliest batch
-            const fefoGroups = new Map<string, typeof validItems[0]>();
+            const fefoGroups = new Map<string, (typeof validItems)[0]>();
             for (const item of validItems) {
               const key = item.name.trim().toLowerCase();
               if (!fefoGroups.has(key)) {
@@ -195,34 +814,41 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                 "━━━━━━━━━━━━━━━━━━━━━━━━━",
               ];
 
+              const itemButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
               let rank = 1;
-              for (const item of priorityBatches.slice(0, 10)) {
+              for (const item of priorityBatches.slice(0, 8)) {
                 const days = daysUntil(item.expiry_date);
                 const cdText = days === 0 ? "ينتهي اليوم!" : `${days} يوم متبقٍ`;
                 lines.push(
                   `${rank}. 🍫 *${item.name}*`,
-                  `   • تشغيلة أولوية #1: \`#${item.batch_number || "—"}\` | كود: \`${item.item_code || "—"}\``,
+                  `   • تشغيلة أولوية #1: \`#${item.batch_number || item.item_code || "—"}\``,
                   `   • الرصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "المخزن العام"}`,
                   `   • الصلاحية: *${item.expiry_date}* (${cdText})\n`,
                 );
+
+                itemButtons.push([
+                  {
+                    text: `🔍 فحص ${item.name.slice(0, 14)} (#${(item.batch_number || item.item_code || "").slice(0, 8)})`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
                 rank++;
               }
 
-              if (priorityBatches.length > 10) {
-                lines.push(`_... ويوجد ${priorityBatches.length - 10} خامة أخرى مسجلة._`);
+              if (priorityBatches.length > 8) {
+                lines.push(`_... ويوجد ${priorityBatches.length - 8} خامة أخرى مسجلة._`);
               }
 
               lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ *ملاحظة:* يُرجى الالتزام بهذه التشغيلات لمنع هدر الخامات.");
               replyText = lines.join("\n");
 
-              inlineKeyboard = {
-                inline_keyboard: [
-                  [
-                    { text: "📊 تقرير المخزون", callback_data: "/status" },
-                    { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
-                  ],
-                ],
-              };
+              itemButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: itemButtons };
             }
           }
 
@@ -233,13 +859,9 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
             firstWord === "/status" ||
             firstWord === "/summary" ||
             firstWord === "/report" ||
+            firstWord === "/stats" ||
             rawText === "📊 تقرير المخزون" ||
-            normalized === "تقرير" ||
-            normalized === "حاله" ||
-            normalized === "ملخص" ||
-            normalized === "المخزون" ||
-            normalized.includes("احصائيات") ||
-            normalized.includes("كام صنف")
+            matchesAnyKeyword(normalized, STATUS_KEYWORDS)
           ) {
             const { data: items } = await supabaseAdmin
               .from("items")
@@ -292,8 +914,8 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
               `• ⛔ منتهي الصلاحية: *${expired}*\n` +
               "━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
               (critical > 0 || expired > 0
-                ? `⚠️ *تنبيه:* يوجد *${critical + expired}* تشغيلة حرجة/منتهية! اضغط الزر أدناه لمعاينتها.`
-                : "✅ جميع الخامات في نطاق تشغيل آمن وسليم.");
+                ? `⚠️ *تنبيه:* يوجد *${critical + expired}* تشغيلة حرجة/منتهية! اضغط الزر أدناه لمعاينتها فوراً.`
+                : "✅ جميع الخامات في نطاق تشغيل آمن وسليم ومطابق للمواصفات.");
 
             inlineKeyboard = {
               inline_keyboard: [
@@ -303,7 +925,11 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                 ],
                 [
                   { text: "🔒 شحنات الحجر (QC)", callback_data: "/qc" },
+                  { text: "⛔ المنتهية فقط", callback_data: "/expired" },
+                ],
+                [
                   { text: "⚡ تشغيل فحص فوري", callback_data: "/check" },
+                  { text: "🔄 تحديث التقرير", callback_data: "/status" },
                 ],
               ],
             };
@@ -316,15 +942,11 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
             firstWord === "/urgent" ||
             firstWord === "/expiring" ||
             rawText === "🚨 الخامات الحرجة" ||
-            normalized === "طوارئ" ||
-            normalized === "حرج" ||
-            normalized.includes("خامات حرجه") ||
-            normalized.includes("ايه اللي هينتهي") ||
-            normalized.includes("قريب من الانتهاء")
+            matchesAnyKeyword(normalized, URGENT_KEYWORDS)
           ) {
             const { data: items } = await supabaseAdmin
               .from("items")
-              .select("name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status")
               .order("expiry_date", { ascending: true });
 
             const urgentItems = (items ?? [])
@@ -337,13 +959,23 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
 
             if (urgentItems.length === 0) {
               replyText = "🎉 ممتاز جداً! لا توجد حالياً أي خامات منتهية أو حرجة في مصنع فيينا.";
+              inlineKeyboard = {
+                inline_keyboard: [
+                  [
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                  ],
+                ],
+              };
             } else {
               const lines = [
                 `🚨 *قائمة الخامات الحرجة والوشيكة (${urgentItems.length} تشغيلة):*`,
                 "━━━━━━━━━━━━━━━━━━━━━━━━━",
               ];
 
-              for (const { item, days, st } of urgentItems.slice(0, 10)) {
+              const urgentButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
+              for (const { item, days, st } of urgentItems.slice(0, 8)) {
                 const badge =
                   st === "expired"
                     ? "⛔ [منتهي الصلاحية]"
@@ -360,23 +992,32 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                   `  ⚖️ كمية: *${item.quantity ?? "—"} ${item.unit ?? ""}* | 📍 موقع: ${item.storage_location || "—"}`,
                   `  📅 انتهاء: *${item.expiry_date}* (${cdText})\n`,
                 );
+
+                urgentButtons.push([
+                  {
+                    text: `🔍 فحص ${item.name.slice(0, 14)} (#${(item.batch_number || item.item_code || "").slice(0, 8)})`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
               }
 
-              if (urgentItems.length > 10) {
-                lines.push(`_... ويوجد ${urgentItems.length - 10} خامة أخرى مسجلة في لوحة التحكم._`);
+              if (urgentItems.length > 8) {
+                lines.push(`_... ويوجد ${urgentItems.length - 8} خامة أخرى مسجلة في لوحة التحكم._`);
               }
 
               lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n📋 *توجيه:* امنح أولوية الصرف لهذه الخامات وفق قاعدة FEFO.");
               replyText = lines.join("\n");
 
-              inlineKeyboard = {
-                inline_keyboard: [
-                  [
-                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
-                    { text: "⚡ فحص الصلاحية وإرسال تنبيه", callback_data: "/check" },
-                  ],
-                ],
-              };
+              urgentButtons.push([
+                { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                { text: "⛔ المنتهية فقط", callback_data: "/expired" },
+              ]);
+              urgentButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "⚡ فحص وإرسال تنبيه", callback_data: "/check" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: urgentButtons };
             }
           }
 
@@ -385,19 +1026,25 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
           // ==========================================
           else if (
             firstWord === "/expired" ||
-            normalized === "منتهي" ||
-            normalized === "منتهيه" ||
-            normalized === "المنتهي"
+            matchesAnyKeyword(normalized, EXPIRED_KEYWORDS)
           ) {
             const { data: items } = await supabaseAdmin
               .from("items")
-              .select("name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status")
               .order("expiry_date", { ascending: true });
 
             const expiredItems = (items ?? []).filter((i) => daysUntil(i.expiry_date) < 0);
 
             if (expiredItems.length === 0) {
               replyText = "✅ ممتاز! لا توجد أي خامة منتهية الصلاحية مسجلة في النظام حالياً.";
+              inlineKeyboard = {
+                inline_keyboard: [
+                  [
+                    { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                  ],
+                ],
+              };
             } else {
               const lines = [
                 `⛔ *كشف الخامات منتهية الصلاحية (${expiredItems.length} تشغيلة):*`,
@@ -405,7 +1052,9 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                 "━━━━━━━━━━━━━━━━━━━━━━━━━",
               ];
 
-              for (const item of expiredItems.slice(0, 10)) {
+              const expButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
+              for (const item of expiredItems.slice(0, 8)) {
                 const days = Math.abs(daysUntil(item.expiry_date));
                 lines.push(
                   `• ⛔ *${item.name}*`,
@@ -413,14 +1062,28 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                   `  ⚖️ كمية: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "—"}`,
                   `  📅 تاريخ الانتهاء: *${item.expiry_date}* (منتهي منذ ${days} يوم)\n`,
                 );
+
+                expButtons.push([
+                  {
+                    text: `🔍 فحص ${item.name.slice(0, 14)} (#${(item.batch_number || item.item_code || "").slice(0, 8)})`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
               }
 
-              if (expiredItems.length > 10) {
-                lines.push(`_... ويوجد ${expiredItems.length - 10} تشغيلة منتهية أخرى._`);
+              if (expiredItems.length > 8) {
+                lines.push(`_... ويوجد ${expiredItems.length - 8} تشغيلة منتهية أخرى._`);
               }
 
               lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n🔒 يرجى التنسيق مع فريق الجودة والمخازن للإعدام أو الإرجاع.");
               replyText = lines.join("\n");
+
+              expButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "🔒 شحنات الحجر", callback_data: "/qc" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: expButtons };
             }
           }
 
@@ -430,24 +1093,33 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
           else if (
             firstWord === "/qc" ||
             rawText === "🔒 شحنات الحجر (QC)" ||
-            normalized === "حجر" ||
-            normalized === "الحجر" ||
-            normalized.includes("عينات الجوده")
+            matchesAnyKeyword(normalized, QC_KEYWORDS)
           ) {
             const { data: quarantineItems } = await supabaseAdmin
               .from("items")
-              .select("name, item_code, batch_number, quantity, unit, expiry_date, storage_location, supplier")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, supplier")
               .eq("qc_status", "quarantine")
               .order("created_at", { ascending: false });
 
             const list = quarantineItems ?? [];
             if (list.length === 0) {
               replyText = "✅ لا توجد أي شحنات في الحجر الصحي حالياً. جميع الخامات مفحوصة ومعتمدة!";
+              inlineKeyboard = {
+                inline_keyboard: [
+                  [
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                    { text: "🥇 أولوية FEFO", callback_data: "/fefo" },
+                  ],
+                ],
+              };
             } else {
               const lines = [
                 `🔒 *شحنات بانتظار فحص واعتماد الجودة (${list.length} تشغيلة):*`,
                 "━━━━━━━━━━━━━━━━━━━━━━━━━",
               ];
+
+              const qcButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
               for (const item of list.slice(0, 8)) {
                 lines.push(
                   `• 📦 *${item.name}*`,
@@ -455,32 +1127,95 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                   `  🏢 مورد: ${item.supplier || "—"} | ⚖️ كمية: *${item.quantity ?? "—"} ${item.unit ?? ""}*`,
                   `  📍 موقع: ${item.storage_location || "—"} | 📅 انتهاء: *${item.expiry_date}*\n`,
                 );
+
+                qcButtons.push([
+                  {
+                    text: `🔍 فحص ${item.name.slice(0, 14)} (#${(item.batch_number || item.item_code || "").slice(0, 8)})`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
               }
+
               if (list.length > 8) {
                 lines.push(`_... ويوجد ${list.length - 8} شحنة أخرى في الحجر._`);
               }
               replyText = lines.join("\n");
 
-              inlineKeyboard = {
-                inline_keyboard: [
-                  [
-                    { text: "📊 تقرير المخزون", callback_data: "/status" },
-                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
-                  ],
-                ],
-              };
+              qcButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: qcButtons };
             }
           }
 
           // ==========================================
-          // 7. TRIGGER IMMEDIATE EXPIRY CHECK
+          // 7. REJECTED ITEMS (المرفوضات)
+          // ==========================================
+          else if (
+            firstWord === "/rejected" ||
+            matchesAnyKeyword(normalized, REJECTED_KEYWORDS)
+          ) {
+            const { data: rejectedItems } = await supabaseAdmin
+              .from("items")
+              .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_notes")
+              .eq("qc_status", "rejected")
+              .order("created_at", { ascending: false });
+
+            const list = rejectedItems ?? [];
+            if (list.length === 0) {
+              replyText = "✅ ممتاز! لا توجد أي خامات أو تشغيلات مرفوضة في النظام حالياً.";
+              inlineKeyboard = {
+                inline_keyboard: [
+                  [
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                    { text: "🥇 أولوية FEFO", callback_data: "/fefo" },
+                  ],
+                ],
+              };
+            } else {
+              const lines = [
+                `❌ *كشف الخامات المرفوضة من الجودة (${list.length} تشغيلة):*`,
+                "_(يُحظر استخدامها تماماً ويجب التحفظ عليها لإجراءات الإعدام/الإرجاع)_",
+                "━━━━━━━━━━━━━━━━━━━━━━━━━",
+              ];
+
+              const rejButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
+              for (const item of list.slice(0, 8)) {
+                lines.push(
+                  `• ❌ *${item.name}*`,
+                  `  🔢 تشغيلة: \`#${item.batch_number || "—"}\` | كود: \`${item.item_code || "—"}\``,
+                  `  ⚖️ كمية: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "—"}`,
+                  item.qc_notes ? `  📝 سبب الرفض: _${item.qc_notes}_\n` : "\n",
+                );
+
+                rejButtons.push([
+                  {
+                    text: `🔍 فحص ${item.name.slice(0, 14)} (#${(item.batch_number || item.item_code || "").slice(0, 8)})`,
+                    callback_data: `item:${item.id}`,
+                  },
+                ]);
+              }
+
+              replyText = lines.join("\n");
+              rejButtons.push([
+                { text: "📊 تقرير المخزون", callback_data: "/status" },
+                { text: "🔒 شحنات الحجر", callback_data: "/qc" },
+              ]);
+
+              inlineKeyboard = { inline_keyboard: rejButtons };
+            }
+          }
+
+          // ==========================================
+          // 8. TRIGGER IMMEDIATE EXPIRY CHECK
           // ==========================================
           else if (
             firstWord === "/check" ||
             rawText === "⚡ فحص الصلاحية الآن" ||
-            normalized === "فحص" ||
-            normalized === "شيك" ||
-            normalized.includes("ابعت التنبيهات")
+            matchesAnyKeyword(normalized, CHECK_KEYWORDS)
           ) {
             const { runExpiryCheckEngine } = await import("@/lib/whatsapp.functions");
             const result = await runExpiryCheckEngine();
@@ -492,7 +1227,7 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
               `📨 تنبيهات تليجرام المرسلة: *${result.sentTelegram}*\n` +
               `⏭️ تم تخطي (مسبقة الإرسال): *${result.skipped}*\n` +
               "━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-              "✅ التنبيهات وصلت بنجاح للمجموعات والمسؤولين.";
+              "✅ تم إرسال التنبيهات اللازمة للمجموعات والمسؤولين بنجاح.";
 
             inlineKeyboard = {
               inline_keyboard: [
@@ -500,12 +1235,15 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                   { text: "🚨 عرض الخامات الحرجة", callback_data: "/urgent" },
                   { text: "📊 تقرير المخزون", callback_data: "/status" },
                 ],
+                [
+                  { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                ],
               ],
             };
           }
 
           // ==========================================
-          // 8. SMART PRODUCT & BATCH DATA PARSER (SINGLE & MULTI-ITEM)
+          // 9. SMART PRODUCT & BATCH DATA PARSER (DEEP SEARCH & MULTI-PRODUCT OPTIONS)
           // ==========================================
           else {
             // Extract distinct search tokens from user's message
@@ -513,25 +1251,45 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
 
             if (tokens.length === 0) {
               replyText =
-                "🍫 مرحباً بك في Vienna Batch Watch! اكتب رقم أي تشغيلة أو اسم أي خامة للبحث الفوري، أو اكتب */help* لعرض الأوامر.";
+                "🍫 مرحباً بك في Vienna Batch Watch! اكتب رقم أي تشغيلة أو كود أو اسم أي خامة للبحث الفوري، أو اضغط الزر أدناه لعرض الأوامر.";
+              inlineKeyboard = {
+                inline_keyboard: [
+                  [
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                    { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+                  ],
+                  [
+                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                    { text: "ℹ️ دليل الأوامر", callback_data: "/help" },
+                  ],
+                ],
+              };
             } else if (tokens.length === 1) {
               // --- SINGLE TOKEN QUERY ---
               const token = tokens[0]!;
+              const variants = generateSearchVariants(token);
+
+              // Build comprehensive OR filter using all morphological variants
+              const orFilters = variants
+                .map(
+                  (v) =>
+                    `batch_number.ilike.%${v}%,item_code.ilike.%${v}%,name.ilike.%${v}%,coa_number.ilike.%${v}%,supplier.ilike.%${v}%,storage_location.ilike.%${v}%`,
+                )
+                .join(",");
+
               const { data: matched } = await supabaseAdmin
                 .from("items")
                 .select("*")
-                .or(
-                  `batch_number.ilike.%${token}%,item_code.ilike.%${token}%,name.ilike.%${token}%,coa_number.ilike.%${token}%,supplier.ilike.%${token}%`,
-                )
+                .or(orFilters)
                 .order("expiry_date", { ascending: true })
-                .limit(8);
+                .limit(40);
 
               const results = matched ?? [];
 
               if (results.length === 0) {
                 replyText =
                   `❓ لم أتمكن من العثور على أي تشغيلة أو خامة مطابقة لـ: *"${token}"*.\n\n` +
-                  "💡 تأكد من كتابة رقم التشغيلة أو كود الصنف بدقة، أو اكتب */status* لعرض ملخص المخزون.";
+                  "💡 تأكد من كتابة رقم التشغيلة أو كود الصنف بدقة، أو ابحث باسم الخامة (مثل: كاكاو، سكر، دقيق).";
 
                 inlineKeyboard = {
                   inline_keyboard: [
@@ -539,90 +1297,146 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                       { text: "📊 تقرير المخزون الشامل", callback_data: "/status" },
                       { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
                     ],
-                  ],
-                };
-              } else if (results.length === 1) {
-                // Exactly 1 item matched -> Ultra Detailed Report Card!
-                const item = results[0];
-                const days = daysUntil(item.expiry_date);
-                const st = statusFor(days, thresholds);
-
-                // Check FEFO priority for this material
-                const { data: siblingBatches } = await supabaseAdmin
-                  .from("items")
-                  .select("id, expiry_date, batch_number")
-                  .eq("name", item.name)
-                  .eq("qc_status", "approved")
-                  .order("expiry_date", { ascending: true })
-                  .limit(1);
-
-                const isFefoPriority = siblingBatches && siblingBatches[0]?.id === item.id;
-
-                const report = buildSingleItemReportCard(item, days, st, isFefoPriority);
-                replyText = report.text;
-
-                // If item has a photo, attempt to get signed URL
-                if (item.photo_path) {
-                  const photos = parsePhotos(item.photo_path);
-                  if (photos[0]?.path) {
-                    const { data: signed } = await supabaseAdmin.storage
-                      .from("item-photos")
-                      .createSignedUrl(photos[0].path, 3600);
-                    if (signed?.signedUrl) {
-                      photoUrlToSend = signed.signedUrl;
-                    }
-                  }
-                }
-
-                inlineKeyboard = {
-                  inline_keyboard: [
                     [
                       { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
-                      { text: "📊 تقرير المخزون", callback_data: "/status" },
                     ],
                   ],
                 };
               } else {
-                // Multiple batches match this single query (e.g. user typed "كاكاو" or "سكر")
-                const lines = [
-                  `🔍 *تم العثور على ${results.length} تشغيلات مطابقة لـ "${token}":*`,
-                  "_(مرتبة بأولوية الصرف بالصلاحية FEFO)_",
-                  "━━━━━━━━━━━━━━━━━━━━━━━━━",
-                ];
-
-                let idx = 1;
+                // Group results by distinct product name (trimmed)
+                const productMap = new Map<string, typeof results>();
                 for (const item of results) {
-                  const days = daysUntil(item.expiry_date);
-                  const cdText = days < 0 ? `⛔ منتهي منذ ${Math.abs(days)} يوم` : `⏳ متبقٍ ${days} يوم`;
-                  const qcLabel =
-                    item.qc_status === "approved"
-                      ? "✅ معتمد"
-                      : item.qc_status === "rejected"
-                        ? "❌ مرفوض"
-                        : "🔒 تحت الحجر";
-
-                  const fefoTag = idx === 1 && item.qc_status === "approved" ? " 🥇 [أولوية #1]" : "";
-
-                  lines.push(
-                    `${idx}. 📦 *${item.name}*${fefoTag}`,
-                    `   • تشغيلة: \`#${item.batch_number || "—"}\` | كود: \`${item.item_code || "—"}\``,
-                    `   • الرصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "—"}`,
-                    `   • الصلاحية: *${item.expiry_date}* (${cdText}) | ${qcLabel}\n`,
-                  );
-                  idx++;
+                  const pName = item.name.trim();
+                  if (!productMap.has(pName)) {
+                    productMap.set(pName, []);
+                  }
+                  productMap.get(pName)!.push(item);
                 }
 
-                lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 لعرض بطاقة تفصيلية لأي تشغيلة، ارسل رقم التشغيلة مباشرة.");
-                replyText = lines.join("\n");
+                // ==========================================
+                // 💡 SMART MULTI-PRODUCT BRANCH:
+                // If the word matches MULTIPLE DISTINCT PRODUCTS,
+                // present intelligent options/buttons so the user can choose directly!
+                // ==========================================
+                if (productMap.size > 1) {
+                  replyText =
+                    `🔍 كلمة *"${token}"* مشتركة في *${productMap.size}* منتجات مسجلة بمصنع فيينا:\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `يرجى اختيار الصنف المطلوب لمعاينة تشغيلاته وموقف الجودة والصرف:`;
 
-                inlineKeyboard = {
-                  inline_keyboard: [
-                    [
-                      { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
-                      { text: "📊 تقرير المخزون", callback_data: "/status" },
+                  const productButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+                  for (const [prodName, batches] of productMap.entries()) {
+                    const hasCritical = batches.some((b) => daysUntil(b.expiry_date) <= thresholds.critical);
+                    const icon = hasCritical ? "🚨" : "🍫";
+                    const label = `${icon} ${prodName.slice(0, 24)} (${batches.length} تشغيلة)`;
+                    productButtons.push([{ text: label, callback_data: `mat:${prodName}` }]);
+                  }
+
+                  // Add option to view all batches combined
+                  productButtons.push([
+                    {
+                      text: `📋 عرض كل التشغيلات معاً (${results.length} تشغيلة)`,
+                      callback_data: `allbatches:${token}`,
+                    },
+                  ]);
+                  productButtons.push([
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                  ]);
+
+                  inlineKeyboard = { inline_keyboard: productButtons.slice(0, 8) };
+                } else if (results.length === 1 && results[0]) {
+                  // Single product, exactly 1 batch -> Ultra Detailed Report Card!
+                  const item = results[0];
+                  const days = daysUntil(item.expiry_date);
+                  const st = statusFor(days, thresholds);
+
+                  const { data: siblingBatches } = await supabaseAdmin
+                    .from("items")
+                    .select("id, expiry_date, batch_number")
+                    .eq("name", item.name)
+                    .eq("qc_status", "approved")
+                    .order("expiry_date", { ascending: true })
+                    .limit(1);
+
+                  const isFefoPriority = Boolean(siblingBatches && siblingBatches[0]?.id === item.id);
+                  const report = buildSingleItemReportCard(item, days, st, isFefoPriority);
+                  replyText = report.text;
+
+                  if (item.photo_path) {
+                    const photos = parsePhotos(item.photo_path);
+                    if (photos[0]?.path) {
+                      const { data: signed } = await supabaseAdmin.storage
+                        .from("item-photos")
+                        .createSignedUrl(photos[0].path, 3600);
+                      if (signed?.signedUrl) {
+                        photoUrlToSend = signed.signedUrl;
+                      }
+                    }
+                  }
+
+                  inlineKeyboard = {
+                    inline_keyboard: [
+                      [
+                        { text: `📦 كل تشغيلات (${item.name.slice(0, 16)})`, callback_data: `mat:${item.name}` },
+                        { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                      ],
+                      [
+                        { text: "📊 تقرير المخزون", callback_data: "/status" },
+                        { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+                      ],
                     ],
-                  ],
-                };
+                  };
+                } else {
+                  // Single product, multiple batches -> FEFO order list with 1-tap inspection buttons!
+                  const firstItem = results[0]!;
+                  const lines = [
+                    `🔍 *تشغيلات (${firstItem.name}) بالمخزن (${results.length} تشغيلة):*`,
+                    "_(مرتبة بأولوية الصرف بالصلاحية FEFO)_",
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━",
+                  ];
+
+                  const buttonsRow: Array<Array<{ text: string; callback_data: string }>> = [];
+
+                  let idx = 1;
+                  for (const item of results) {
+                    const days = daysUntil(item.expiry_date);
+                    const cdText = days < 0 ? `⛔ منتهي منذ ${Math.abs(days)} يوم` : `⏳ متبقٍ ${days} يوم`;
+                    const qcLabel =
+                      item.qc_status === "approved"
+                        ? "✅ معتمد"
+                        : item.qc_status === "rejected"
+                          ? "❌ مرفوض"
+                          : "🔒 تحت الحجر";
+
+                    const fefoTag = idx === 1 && item.qc_status === "approved" ? " 🥇 [أولوية #1]" : "";
+
+                    lines.push(
+                      `${idx}. 📦 *تشغيلة #${item.batch_number || "—"}*${fefoTag}`,
+                      `   • كود: \`${item.item_code || "—"}\` | رصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}*`,
+                      `   • موقع: ${item.storage_location || "المخزن العام"}`,
+                      `   • الصلاحية: *${item.expiry_date}* (${cdText}) | ${qcLabel}\n`,
+                    );
+
+                    buttonsRow.push([
+                      {
+                        text: `🔍 فحص تشغيلة #${(item.batch_number || item.item_code || String(idx)).slice(0, 14)}`,
+                        callback_data: `item:${item.id}`,
+                      },
+                    ]);
+                    idx++;
+                  }
+
+                  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 اضغط على زر أي تشغيلة أدناه لعرض بطاقة الجودة والموقع بالكامل:");
+                  replyText = lines.join("\n");
+
+                  buttonsRow.push([
+                    { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                    { text: "📊 تقرير المخزون", callback_data: "/status" },
+                  ]);
+
+                  inlineKeyboard = { inline_keyboard: buttonsRow.slice(0, 8) };
+                }
               }
             } else {
               // --- MULTI-TOKEN QUERY (User sent multiple batch numbers / items) ---
@@ -630,12 +1444,15 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
               const notFoundTokens: string[] = [];
 
               for (const token of tokens) {
+                const variants = generateSearchVariants(token);
+                const orFilters = variants
+                  .map((v) => `batch_number.ilike.%${v}%,item_code.ilike.%${v}%,name.ilike.%${v}%`)
+                  .join(",");
+
                 const { data: matched } = await supabaseAdmin
                   .from("items")
                   .select("*")
-                  .or(
-                    `batch_number.ilike.%${token}%,item_code.ilike.%${token}%,name.ilike.%${token}%`,
-                  )
+                  .or(orFilters)
                   .order("expiry_date", { ascending: true })
                   .limit(1);
 
@@ -657,8 +1474,10 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                   "━━━━━━━━━━━━━━━━━━━━━━━━━",
                 ];
 
+                const multiButtons: Array<Array<{ text: string; callback_data: string }>> = [];
+
                 let idx = 1;
-                for (const { token, item } of matchedItems) {
+                for (const { token: _t, item } of matchedItems) {
                   const days = daysUntil(item.expiry_date);
                   const st = statusFor(days, thresholds);
 
@@ -688,6 +1507,13 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                     `   • الرصيد: *${item.quantity ?? "—"} ${item.unit ?? ""}* | موقع: ${item.storage_location || "—"}`,
                     `   • موقف الجودة: ${qcLabel}\n`,
                   );
+
+                  multiButtons.push([
+                    {
+                      text: `🔍 فحص تشغيلة #${(item.batch_number || item.item_code || String(idx)).slice(0, 14)}`,
+                      callback_data: `item:${item.id}`,
+                    },
+                  ]);
                   idx++;
                 }
 
@@ -702,14 +1528,12 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
                 lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 اضغط على الأزرار السريعة أدناه لمزيد من الإجراءات.");
                 replyText = lines.join("\n");
 
-                inlineKeyboard = {
-                  inline_keyboard: [
-                    [
-                      { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
-                      { text: "📊 تقرير المخزون", callback_data: "/status" },
-                    ],
-                  ],
-                };
+                multiButtons.push([
+                  { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+                  { text: "📊 تقرير المخزون", callback_data: "/status" },
+                ]);
+
+                inlineKeyboard = { inline_keyboard: multiButtons.slice(0, 8) };
               }
             }
           }
@@ -754,6 +1578,67 @@ export const Route = createFileRoute("/api/public/hooks/telegram-webhook")({
 });
 
 /**
+ * Checks if clean user input matches any of the given keywords,
+ * whether as an exact standalone word, prefix/suffix, or part of a short phrase.
+ */
+function matchesAnyKeyword(text: string, keywords: string[]): boolean {
+  const clean = text.trim();
+  const words = clean.split(/\s+/);
+  for (const kw of keywords) {
+    if (clean === kw) return true;
+    if (words.includes(kw)) return true;
+    if (words.length <= 4 && (clean.startsWith(kw + " ") || clean.endsWith(" " + kw))) return true;
+    if (kw.length >= 4 && clean.includes(kw)) return true;
+  }
+  return false;
+}
+
+/**
+ * Generates search variants to handle Arabic morphology:
+ * - Stems leading 'ال' (e.g. 'الكاكاو' -> 'كاكاو')
+ * - Normalizes 'ه' vs 'ة'
+ * - Normalizes 'ي' vs 'ى'
+ * - Normalizes hamzas ('أ', 'إ', 'آ' -> 'ا')
+ */
+function generateSearchVariants(raw: string): string[] {
+  const clean = raw.trim();
+  const variants = new Set<string>();
+  variants.add(clean);
+
+  // Strip leading 'ال'
+  if (clean.startsWith("ال") && clean.length > 3) {
+    variants.add(clean.slice(2));
+  }
+
+  // Handle 'ه' vs 'ة' at the end
+  if (clean.endsWith("ة")) {
+    variants.add(clean.slice(0, -1) + "ه");
+    variants.add(clean.slice(0, -1)); // root stem
+  } else if (clean.endsWith("ه")) {
+    variants.add(clean.slice(0, -1) + "ة");
+    variants.add(clean.slice(0, -1)); // root stem
+  }
+
+  // Handle 'ي' vs 'ى' at the end
+  if (clean.endsWith("ي")) {
+    variants.add(clean.slice(0, -1) + "ى");
+  } else if (clean.endsWith("ى")) {
+    variants.add(clean.slice(0, -1) + "ي");
+  }
+
+  // Handle 'أ' / 'إ' / 'آ' -> 'ا'
+  const normalizedAlef = clean.replace(/[إأآ]/g, "ا");
+  if (normalizedAlef !== clean) {
+    variants.add(normalizedAlef);
+    if (normalizedAlef.startsWith("ال") && normalizedAlef.length > 3) {
+      variants.add(normalizedAlef.slice(2));
+    }
+  }
+
+  return Array.from(variants).filter((v) => v.length >= 2);
+}
+
+/**
  * Intelligently extract search tokens from raw user text:
  * Supports multi-line input, commas, conjunctions, and strips conversational filler words.
  */
@@ -763,14 +1648,19 @@ function extractSearchTokens(raw: string): string[] {
   // Strip common bot commands if prepended
   cleaned = cleaned.replace(/^\/(search|find|batch|item|check)\s*/i, "");
 
-  // Strip conversational Arabic prefixes
+  // Strip conversational Arabic prefixes iteratively
   const prefixes = [
-    /^(عايز|اريد|شوفلي|شفلي|ابحث عن|تقرير عن|بيانات|تفاصيل|حاله|حالة|استعلام عن|استعلم عن)\s+/i,
+    /^(عايز|عاوز|اريد|شوفلي|شفلي|ابحث عن|تقرير عن|بيانات|تفاصيل|حاله|حالة|استعلام عن|استعلم عن|ممكن تشوف|هاتلي)\s+/i,
     /^(تشغيله|تشغيلة|الباتش|باتش|رقم الباتش|رقم التشغيلة|رقم التشغيله|كود الصنف|كود)\s+/i,
+    /^(مورد|المورد|مخزن|المخزن)\s+/i,
   ];
 
-  for (const prefix of prefixes) {
-    cleaned = cleaned.replace(prefix, "").trim();
+  let previous = "";
+  while (previous !== cleaned) {
+    previous = cleaned;
+    for (const prefix of prefixes) {
+      cleaned = cleaned.replace(prefix, "").trim();
+    }
   }
 
   // 1. Check for multiple lines

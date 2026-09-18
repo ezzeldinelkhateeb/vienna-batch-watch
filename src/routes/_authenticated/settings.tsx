@@ -29,6 +29,8 @@ import {
   sendTestTelegram,
   triggerExpiryCheckNow,
   registerTelegramBotWebhook,
+  getTelegramWebhookStatus,
+  sendMorningBriefingNow,
 } from "@/lib/whatsapp.functions";
 import { buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { AppHeader } from "@/components/AppHeader";
@@ -54,7 +56,7 @@ export type SettingsTab = "alerts" | "thresholds" | "team" | "backup" | "admin_h
 
 export const Route = createFileRoute("/_authenticated/settings")({
   validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => ({
-    tab: (search.tab as SettingsTab) || undefined,
+    tab: (search["tab"] as SettingsTab) || undefined,
   }),
   head: () => ({
     meta: [
@@ -84,8 +86,11 @@ function SettingsPage() {
   const sendTgTest = useServerFn(sendTestTelegram);
   const runCheckNow = useServerFn(triggerExpiryCheckNow);
   const registerWebhook = useServerFn(registerTelegramBotWebhook);
+  const checkWebhook = useServerFn(getTelegramWebhookStatus);
+  const sendMorning = useServerFn(sendMorningBriefingNow);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(search?.tab || "alerts");
+  const [sendingMorning, setSendingMorning] = useState(false);
 
   useEffect(() => {
     if (search?.tab) {
@@ -112,6 +117,11 @@ function SettingsPage() {
   const [testingWa, setTestingWa] = useState(false);
   const [testingTg, setTestingTg] = useState(false);
   const [activatingWebhook, setActivatingWebhook] = useState(false);
+  const [checkingWebhook, setCheckingWebhook] = useState(false);
+  const [telegramDiagnostic, setTelegramDiagnostic] = useState<{
+    bot?: any;
+    webhook?: any;
+  } | null>(null);
   const [triggering, setTriggering] = useState(false);
   const [callmebotDiagnostic, setCallmebotDiagnostic] = useState<string | null>(null);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
@@ -332,12 +342,15 @@ function SettingsPage() {
     }
     setActivatingWebhook(true);
     try {
-      const res = await registerWebhook({ data: { botToken: tgToken } });
+      const siteUrl = typeof window !== "undefined" ? window.location.origin : undefined;
+      const res = await registerWebhook({ data: { botToken: tgToken, siteUrl } });
       if (res.success) {
+        const usernameTag = res.botUsername ? ` (@${res.botUsername})` : "";
         toast.success(
-          "تم تفعيل الرد التلقائي الذكي للبوت بنجاح! 🎉 يمكنك الآن مراسلة البوت وسؤاله في الخاص أو في الجروب وسيجيبك فوراً.",
+          `تم تفعيل وإصلاح الرد التلقائي الذكي للبوت بنجاح! 🎉${usernameTag} يمكنك الآن مراسلة البوت وسؤاله في الخاص أو في الجروب وسيجيبك فوراً مع عمل كافة الأزرار.`,
           { duration: 8000 },
         );
+        void handleCheckWebhookStatus();
       } else {
         toast.error(res.error || "فشل تفعيل الـ Webhook مع سيرفر تليجرام.");
       }
@@ -345,6 +358,51 @@ function SettingsPage() {
       toast.error(err?.message || "حدث خطأ أثناء تفعيل الرد الذكي.");
     } finally {
       setActivatingWebhook(false);
+    }
+  };
+
+  const handleCheckWebhookStatus = async () => {
+    if (!tgToken.trim()) {
+      toast.error("يرجى إدخال رمز البوت (Bot Token) لفحص حالته.");
+      return;
+    }
+    setCheckingWebhook(true);
+    try {
+      const res = await checkWebhook({ data: { botToken: tgToken } });
+      if (res.success) {
+        setTelegramDiagnostic({ bot: res.bot, webhook: res.webhook });
+        if (res.webhook?.url) {
+          toast.success("البوت متصل بالـ Webhook بنجاح وجاهز لاستقبال الرسائل والأزرار ✅");
+        } else {
+          toast.warning("الـ Webhook غير مفعل حالياً للبوت. اضغط على زر تفعيل الرد الذكي ⚡");
+        }
+      } else {
+        toast.error(res.error || "فشل التحقق من حالة البوت.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "خطأ في الاتصال بسيرفر تليجرام.");
+    } finally {
+      setCheckingWebhook(false);
+    }
+  };
+
+  const handleSendMorning = async () => {
+    if (!tgToken.trim() || !tgChatId.trim()) {
+      toast.error("يرجى إدخال وحفظ رمز البوت ومعرّف المحادثة أولاً.");
+      return;
+    }
+    setSendingMorning(true);
+    try {
+      const res = await sendMorning({ data: { botToken: tgToken.trim(), chatId: tgChatId.trim() } });
+      if (res.success) {
+        toast.success("تم إرسال نشرة وردية الصباح إلى تليجرام بنجاح! 🌅");
+      } else {
+        toast.error(res.error || "فشل إرسال نشرة الصباح.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "تعذر إرسال نشرة الصباح.");
+    } finally {
+      setSendingMorning(false);
     }
   };
 
@@ -707,9 +765,94 @@ function SettingsPage() {
                     className="gap-2 text-xs border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20 font-bold"
                   >
                     <Sparkles className="size-3.5 text-blue-600" />
-                    <span>{activatingWebhook ? "جارٍ التفعيل..." : "⚡ تفعيل الرد الذكي للبوت (Webhook)"}</span>
+                    <span>{activatingWebhook ? "جارٍ التفعيل..." : "⚡ تفعيل وإصلاح الرد الذكي (Webhook)"}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCheckWebhookStatus}
+                    disabled={checkingWebhook || !tgToken.trim()}
+                    className="gap-2 text-xs border-dashed text-muted-foreground hover:text-foreground"
+                  >
+                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                    <span>{checkingWebhook ? "جارٍ الفحص..." : "🔍 فحص وتشخيص الـ Webhook"}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendMorning}
+                    disabled={sendingMorning || !tgToken.trim() || !tgChatId.trim()}
+                    className="gap-2 text-xs border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <Sparkles className="size-3.5 text-amber-500" />
+                    <span>{sendingMorning ? "جارٍ الإرسال..." : "🌅 تجربة نشرة الصباح"}</span>
                   </Button>
                 </div>
+
+                {/* Telegram Diagnostic Card */}
+                {telegramDiagnostic && (
+                  <div className="rounded-xl border border-border bg-card/60 p-3.5 text-xs space-y-2 text-cocoa">
+                    <div className="flex items-center justify-between font-bold text-xs pb-1 border-b border-border/50">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="size-3.5 text-blue-600" />
+                        <span>معلومات البوت والـ Webhook المباشرة:</span>
+                      </span>
+                      {telegramDiagnostic.webhook?.url ? (
+                        <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          متصل ونشط ✅
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          غير مرتبط ⚠️
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      {telegramDiagnostic.bot && (
+                        <div>
+                          <span className="text-muted-foreground">اسم ومعرّف البوت:</span>{" "}
+                          <strong>{telegramDiagnostic.bot.first_name}</strong>{" "}
+                          {telegramDiagnostic.bot.username && (
+                            <a
+                              href={`https://t.me/${telegramDiagnostic.bot.username}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 underline font-mono font-bold"
+                            >
+                              @{telegramDiagnostic.bot.username}
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-muted-foreground">التحديثات المعلقة:</span>{" "}
+                        <strong>{telegramDiagnostic.webhook?.pending_update_count ?? 0}</strong>
+                      </div>
+                      <div className="sm:col-span-2 break-all">
+                        <span className="text-muted-foreground">رابط الـ Webhook المسجل:</span>{" "}
+                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">
+                          {telegramDiagnostic.webhook?.url || "لا يوجد رابط مسجل حالياً"}
+                        </code>
+                      </div>
+                      {telegramDiagnostic.webhook?.allowed_updates && (
+                        <div className="sm:col-span-2">
+                          <span className="text-muted-foreground">الأحداث المسموح بها:</span>{" "}
+                          <span className="font-mono text-[10px]">
+                            {telegramDiagnostic.webhook.allowed_updates.join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {telegramDiagnostic.webhook?.last_error_message && (
+                        <div className="sm:col-span-2 text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 text-[11px]">
+                          <strong>آخر خطأ من تليجرام:</strong> {telegramDiagnostic.webhook.last_error_message}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Group and Commands Guide */}
                 <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 text-xs space-y-2.5">
@@ -733,23 +876,29 @@ function SettingsPage() {
                   <div className="border-t border-blue-500/20 pt-2.5 space-y-1">
                     <p className="font-bold text-cocoa text-xs flex items-center gap-1.5">
                       <Sparkles className="size-3.5 text-blue-600" />
-                      <span>🧠 قدرات البوت الذكي (بعد الضغط على تفعيل الرد الذكي):</span>
+                      <span>🧠 قدرات البوت التشغيلية والرد الذكي:</span>
                     </p>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      يمكنك أو لأي عضو في الجروب كتابة أي أمر للبوت وسيقوم بالرد الفوري من قاعدة البيانات:
+                      يدعم البوت الأوامر الفورية، الكلمات المفردة، والأزرار السريعة لاعتماد وفك الحجر وصرف الإنتاج:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] font-mono text-cocoa pt-1">
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-amber-600">/morning</span> أو "صباح الخير" : نشرة وردية الصباح
+                      </div>
+                      <div className="rounded bg-card/80 p-1.5 border border-border/60">
+                        <span className="font-bold text-orange-600">/lowstock</span> أو "نواقص" : كشف نقص المخزون
+                      </div>
                       <div className="rounded bg-card/80 p-1.5 border border-border/60">
                         <span className="font-bold text-brand">/status</span> أو "تقرير" : ملخص شامل للمخزون
                       </div>
                       <div className="rounded bg-card/80 p-1.5 border border-border/60">
-                        <span className="font-bold text-red-600">/urgent</span> أو "طوارئ" : الخامات الحرجة فوراً
+                        <span className="font-bold text-red-600">/urgent</span> أو "حرج" : الخامات الحرجة فوراً
                       </div>
                       <div className="rounded bg-card/80 p-1.5 border border-border/60">
-                        <span className="font-bold text-amber-600">/qc</span> أو "حجر" : شحنات الحجر الصحي
+                        <span className="font-bold text-emerald-600">/fefo</span> أو "صرف" : أولوية الصرف #1
                       </div>
                       <div className="rounded bg-card/80 p-1.5 border border-border/60">
-                        <span className="font-bold text-blue-600">/search &lt;اسم&gt;</span> : تفاصيل أي صنف أو تشغيلة
+                        <span className="font-bold text-blue-600">/qc</span> أو "حجر" : شحنات الحجر الصحي
                       </div>
                     </div>
                   </div>

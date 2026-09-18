@@ -122,15 +122,31 @@ export const sendTestTelegram = createServerFn({ method: "POST" })
       "🍫 *Vienna Expiry Tracker (Telegram)* 🍫\n" +
       "تأكيد استلام: تنبيهات صلاحية المواد الخام عبر تليجرام تعمل بنجاح وبأعلى سرعة ✅\n" +
       "وقت الإرسال: " +
-      new Date().toLocaleString("ar-EG");
+      new Date().toLocaleString("ar-EG") +
+      "\n\nاضغط على أي زر أدناه لتجربة الرد السريع والأزرار التفاعلية:";
 
-    const result = await sendTelegram(targetToken, targetChat, testMessage);
+    const testKeyboard = {
+      inline_keyboard: [
+        [
+          { text: "📊 تقرير المخزون", callback_data: "/status" },
+          { text: "🚨 الخامات الحرجة", callback_data: "/urgent" },
+        ],
+        [
+          { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+          { text: "⚡ فحص الصلاحية", callback_data: "/check" },
+        ],
+      ],
+    };
+
+    const result = await sendTelegram(targetToken, targetChat, testMessage, {
+      reply_markup: testKeyboard,
+    });
 
     await safeInsertLog({
       item_name: "رسالة تجريبية (تليجرام)",
       status: "test",
       channel: "telegram",
-      message: "رسالة تجريبية لاختبار إعدادات بوت تليجرام",
+      message: "رسالة تجريبية لاختبار إعدادات بوت تليجرام مع الأزرار التفاعلية",
       phone: targetChat,
       success: result.success,
       error: result.error ?? null,
@@ -240,11 +256,27 @@ export async function runExpiryCheckEngine() {
           error: "بيانات تليجرام غير مكتملة في الإعدادات",
         });
       } else {
+        // Attach interactive buttons directly to the automated alert!
+        const alertKeyboard = {
+          inline_keyboard: [
+            [
+              { text: "🔍 فحص هذه التشغيلة", callback_data: `item:${item.id}` },
+              { text: "🥇 أولوية الصرف FEFO", callback_data: "/fefo" },
+            ],
+            [
+              { text: "📊 تقرير المخزون", callback_data: "/status" },
+              { text: "🔒 شحنات الحجر", callback_data: "/qc" },
+            ],
+          ],
+        };
+
         const tgResult = await sendTelegram(
           settings.telegram_bot_token,
           settings.telegram_chat_id,
           message,
+          { reply_markup: alertKeyboard },
         );
+
         await safeInsertLog({
           item_id: item.id,
           item_name: item.name,
@@ -286,9 +318,15 @@ export const triggerExpiryCheckNow = createServerFn({ method: "POST" }).handler(
   }
 });
 
+export interface RegisterWebhookPayload {
+  botToken?: string | undefined;
+  siteUrl?: string | undefined;
+  webhookUrl?: string | undefined;
+}
+
 /** Server function to register the Telegram Webhook so the bot becomes interactive. */
 export const registerTelegramBotWebhook = createServerFn({ method: "POST" })
-  .validator((data?: { botToken?: string }) => data)
+  .validator((data?: RegisterWebhookPayload) => data)
   .handler(async ({ data }) => {
     let token = data?.botToken?.trim();
     if (!token) {
@@ -308,8 +346,35 @@ export const registerTelegramBotWebhook = createServerFn({ method: "POST" })
       return { success: false as const, error: "رمز البوت (Bot Token) مطلوب لتفعيل الرد الذكي." };
     }
 
-    const { setTelegramWebhook } = await import("./telegram.server");
-    const webhookUrl = "https://vienna-batch-watch.vercel.app/api/public/hooks/telegram-webhook";
+    const {
+      setTelegramWebhook,
+      setTelegramBotCommands,
+      getTelegramBotInfo,
+      getTelegramWebhookInfo,
+    } = await import("./telegram.server");
+
+    // Dynamically determine webhook URL
+    let webhookUrl = data?.webhookUrl?.trim();
+    if (!webhookUrl && data?.siteUrl?.trim()) {
+      webhookUrl = `${data.siteUrl.trim().replace(/\/+$/, "")}/api/public/hooks/telegram-webhook`;
+    }
+    if (!webhookUrl) {
+      const envHost =
+        process.env["APP_URL"] ||
+        (process.env["VERCEL_PROJECT_PRODUCTION_URL"]
+          ? `https://${process.env["VERCEL_PROJECT_PRODUCTION_URL"]}`
+          : process.env["VERCEL_URL"]
+            ? `https://${process.env["VERCEL_URL"]}`
+            : undefined);
+      if (envHost) {
+        webhookUrl = `${envHost.replace(/\/+$/, "")}/api/public/hooks/telegram-webhook`;
+      }
+    }
+    if (!webhookUrl) {
+      webhookUrl = "https://vienna-batch-watch.vercel.app/api/public/hooks/telegram-webhook";
+    }
+
+    // 1. Register Webhook with allowed_updates: message & callback_query
     const res = await setTelegramWebhook(token, webhookUrl);
 
     if (!res.ok) {
@@ -319,8 +384,104 @@ export const registerTelegramBotWebhook = createServerFn({ method: "POST" })
       };
     }
 
+    // 2. Automatically register bot command menu in Telegram
+    try {
+      await setTelegramBotCommands(token);
+    } catch (cmdErr) {
+      console.warn("[registerTelegramBotWebhook] Command menu registration notice:", cmdErr);
+    }
+
+    // 3. Fetch bot details and verified webhook status
+    const botInfo = await getTelegramBotInfo(token);
+    const webhookInfo = await getTelegramWebhookInfo(token);
+
     return {
       success: true as const,
       url: webhookUrl,
+      botUsername: botInfo?.result?.username,
+      botName: botInfo?.result?.first_name,
+      pendingUpdates: webhookInfo?.result?.pending_update_count ?? 0,
     };
   });
+
+/** Server function to query the live Telegram Webhook & Bot status. */
+export const getTelegramWebhookStatus = createServerFn({ method: "POST" })
+  .validator((data?: { botToken?: string | undefined }) => data)
+  .handler(async ({ data }) => {
+    let token = data?.botToken?.trim();
+    if (!token) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: settings } = await supabaseAdmin
+          .from("app_settings")
+          .select("telegram_bot_token")
+          .maybeSingle();
+        token = settings?.telegram_bot_token || undefined;
+      } catch (err) {
+        console.warn("[getTelegramWebhookStatus] Could not load token:", err);
+      }
+    }
+
+    if (!token) {
+      return { success: false as const, error: "لم يتم حفظ رمز البوت (Bot Token) بعد." };
+    }
+
+    const { getTelegramBotInfo, getTelegramWebhookInfo } = await import("./telegram.server");
+    const botInfo = await getTelegramBotInfo(token);
+    const webhookInfo = await getTelegramWebhookInfo(token);
+
+    return {
+      success: true as const,
+      bot: botInfo?.ok ? botInfo.result : null,
+      webhook: webhookInfo?.ok ? webhookInfo.result : null,
+    };
+  });
+
+/** Server function to trigger and send the Morning Briefing to Telegram group. */
+export const sendMorningBriefingNow = createServerFn({ method: "POST" })
+  .validator((data?: { botToken?: string; chatId?: string }) => data)
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: settings } = await supabaseAdmin
+      .from("app_settings")
+      .select("telegram_bot_token, telegram_chat_id, threshold_early, threshold_medium, threshold_critical")
+      .maybeSingle();
+
+    const botToken = data?.botToken?.trim() || settings?.telegram_bot_token || process.env["TELEGRAM_BOT_TOKEN"];
+    const chatId = data?.chatId?.trim() || settings?.telegram_chat_id || process.env["TELEGRAM_CHAT_ID"];
+
+    if (!botToken || !chatId) {
+      return {
+        success: false as const,
+        error: "بيانات تليجرام (Bot Token / Chat ID) غير مكتملة في الإعدادات.",
+      };
+    }
+
+    const { DEFAULT_THRESHOLDS } = await import("./status");
+    const thresholds = {
+      early: settings?.threshold_early ?? DEFAULT_THRESHOLDS.early,
+      medium: settings?.threshold_medium ?? DEFAULT_THRESHOLDS.medium,
+      critical: settings?.threshold_critical ?? DEFAULT_THRESHOLDS.critical,
+    };
+
+    const { data: items } = await supabaseAdmin
+      .from("items")
+      .select("id, name, item_code, batch_number, quantity, unit, expiry_date, storage_location, qc_status, supplier")
+      .order("expiry_date", { ascending: true });
+
+    const { generateMorningBriefing } = await import("./telegram-reports.server");
+    const briefing = generateMorningBriefing(items || [], thresholds);
+
+    const { sendTelegram } = await import("./telegram.server");
+    const result = await sendTelegram(botToken, chatId, briefing.text, {
+      parse_mode: "Markdown",
+      reply_markup: briefing.reply_markup,
+    });
+
+    if (!result.success) {
+      return { success: false as const, error: result.error || "فشل إرسال نشرة الصباح." };
+    }
+
+    return { success: true as const, messageId: result.messageId };
+  });
+
