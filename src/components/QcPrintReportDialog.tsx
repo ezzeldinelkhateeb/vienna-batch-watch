@@ -454,7 +454,7 @@ export function QcPrintReportDialog({ open, onOpenChange, items, thresholds }: P
             <DialogTitle className="text-lg font-semibold text-cocoa">
               {t("qcReportTitle")}
             </DialogTitle>
-            <div className="flex gap-2">
+            <div className="flex gap-2 ltr:me-10 rtl:ms-10">
               <Button
                 onClick={() => setShareWhatsApp(true)}
                 size="sm"

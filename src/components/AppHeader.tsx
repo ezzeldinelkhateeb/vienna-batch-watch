@@ -34,27 +34,27 @@ export function AppHeader({ showNav = true }: { showNav?: boolean }) {
 
   return (
     <header className="brand-header">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
-        <Link to="/" className="flex items-center gap-3 group">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3.5 py-2.5 sm:px-6 sm:py-5">
+        <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group min-w-0">
           {brandLogo ? (
             <img
               src={brandLogo}
               alt={brandName}
-              className="h-12 sm:h-14 w-auto max-w-[150px] sm:max-w-[190px] object-contain rounded-xl bg-white/15 p-1 border border-white/20 shadow-xs"
+              className="h-9 sm:h-14 w-auto max-w-[110px] sm:max-w-[190px] object-contain rounded-lg sm:rounded-xl bg-white/15 p-1 border border-white/20 shadow-xs shrink-0"
             />
           ) : (
-            <div className="flex size-11 sm:size-13 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-2xl sm:text-3xl border border-white/20 shadow-xs group-hover:scale-105 transition-transform">
+            <div className="flex size-9 sm:size-13 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-white/10 text-xl sm:text-3xl border border-white/20 shadow-xs group-hover:scale-105 transition-transform">
               <span>{brandIcon}</span>
             </div>
           )}
-          <div>
-            <span className="brand-script block text-[36px] sm:text-[42px] leading-none">{brandName}</span>
-            <span className="brand-tagline block mt-1">{brandTagline}</span>
-            <span className="mt-0.5 block text-[12px] text-cream/75">{t("systemSubtitle")}</span>
+          <div className="min-w-0">
+            <span className="brand-script block text-[28px] sm:text-[42px] leading-none truncate">{brandName}</span>
+            <span className="brand-tagline block mt-0.5 text-[10px] sm:text-[0.8125rem] truncate">{brandTagline}</span>
+            <span className="hidden sm:block mt-0.5 text-[12px] text-cream/75">{t("systemSubtitle")}</span>
           </div>
         </Link>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 ms-auto">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 ms-2">
           {showNav && (
             <>
               {/* Desktop Nav Items */}

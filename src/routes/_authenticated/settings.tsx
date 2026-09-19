@@ -532,30 +532,30 @@ function SettingsPage() {
         )}
 
         {/* Segmented Tabs Navigation */}
-        <div className="flex rounded-xl border border-border/80 bg-muted/50 p-1 shadow-xs">
+        <div className="flex rounded-xl border border-border/80 bg-muted/50 p-1 shadow-xs overflow-x-auto scrollbar-none gap-1">
           <button
             type="button"
             onClick={() => setActiveTab("alerts")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+            className={`flex shrink-0 sm:shrink sm:flex-1 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium transition-all active:scale-95 ${
               activeTab === "alerts"
                 ? "bg-card text-cocoa font-semibold shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <MessageCircle className="size-4 text-brand" />
+            <MessageCircle className="size-4 text-brand shrink-0" />
             <span>{t("tabSettingsAlerts")}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("thresholds")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+            className={`flex shrink-0 sm:shrink sm:flex-1 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium transition-all active:scale-95 ${
               activeTab === "thresholds"
                 ? "bg-card text-cocoa font-semibold shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Clock className="size-4 text-brand" />
+            <Clock className="size-4 text-brand shrink-0" />
             <span>{t("tabSettingsThresholds")}</span>
           </button>
 
@@ -563,13 +563,13 @@ function SettingsPage() {
             <button
               type="button"
               onClick={() => setActiveTab("team")}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+              className={`flex shrink-0 sm:shrink sm:flex-1 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium transition-all active:scale-95 ${
                 activeTab === "team"
                   ? "bg-card text-cocoa font-semibold shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Users className="size-4 text-brand" />
+              <Users className="size-4 text-brand shrink-0" />
               <span>{t("tabSettingsTeam")}</span>
             </button>
           )}
@@ -577,13 +577,13 @@ function SettingsPage() {
           <button
             type="button"
             onClick={() => setActiveTab("backup")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+            className={`flex shrink-0 sm:shrink sm:flex-1 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium transition-all active:scale-95 ${
               activeTab === "backup"
                 ? "bg-card text-cocoa font-semibold shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Archive className="size-4 text-brand" />
+            <Archive className="size-4 text-brand shrink-0" />
             <span>{t("tabSettingsBackup")}</span>
           </button>
 
@@ -591,13 +591,13 @@ function SettingsPage() {
             <button
               type="button"
               onClick={() => setActiveTab("admin_hub")}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
+              className={`flex shrink-0 sm:shrink sm:flex-1 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs sm:text-sm font-medium transition-all active:scale-95 ${
                 activeTab === "admin_hub"
                   ? "bg-card text-cocoa font-semibold shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Sliders className="size-4 text-brand" />
+              <Sliders className="size-4 text-brand shrink-0" />
               <span>{lang === "ar" ? "لوحة الأدمن" : "Admin Hub"}</span>
             </button>
           )}

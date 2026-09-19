@@ -363,9 +363,10 @@ export function CameraCaptureModal({
           className="max-w-md p-0 overflow-hidden bg-black text-white border-white/20 max-h-[92dvh] sm:max-h-none"
           disableSwipeToClose
           hideDragHandle
+          hideCloseButton
         >
           {/* Header */}
-          <DialogHeader className="p-3 bg-neutral-900 border-b border-white/10 flex flex-row items-center justify-between z-20">
+          <DialogHeader className="p-3 sm:p-3.5 bg-neutral-900 border-b border-white/10 flex flex-row items-center justify-between z-20 ltr:pe-3 rtl:ps-3">
             <DialogTitle className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
               {pendingPhoto ? (
                 <>
@@ -379,7 +380,7 @@ export function CameraCaptureModal({
                 </>
               )}
             </DialogTitle>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               {!pendingPhoto && capturedCount > 0 && (
                 <span className="rounded-full bg-brand/30 px-2 py-0.5 text-xs text-brand font-bold border border-brand/50">
                   {capturedCount} {lang === "ar" ? "صور معتمدة" : "approved"}
@@ -392,10 +393,10 @@ export function CameraCaptureModal({
                   size="icon"
                   disabled={isProcessingApproval}
                   onClick={handleRetake}
-                  className="size-8 rounded-full text-white/70 hover:text-white hover:bg-white/10"
+                  className="size-9 sm:size-8 rounded-full text-white/90 bg-white/15 hover:bg-white/25 active:scale-90 transition-all cursor-pointer"
                   title={lang === "ar" ? "إلغاء والعودة للكاميرا" : "Cancel & Return to Camera"}
                 >
-                  <X className="size-4" />
+                  <X className="size-4.5 sm:size-4 stroke-[2.25]" />
                 </Button>
               ) : (
                 <Button
@@ -403,10 +404,10 @@ export function CameraCaptureModal({
                   variant="ghost"
                   size="icon"
                   onClick={() => onOpenChange(false)}
-                  className="size-8 rounded-full text-white/70 hover:text-white hover:bg-white/10"
+                  className="size-9 sm:size-8 rounded-full text-white/90 bg-white/15 hover:bg-white/25 active:scale-90 transition-all cursor-pointer"
                   title={lang === "ar" ? "إغلاق" : "Close"}
                 >
-                  <X className="size-4" />
+                  <X className="size-4.5 sm:size-4 stroke-[2.25]" />
                 </Button>
               )}
             </div>

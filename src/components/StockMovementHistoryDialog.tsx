@@ -90,7 +90,7 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
         {/* Header */}
-        <div className="bg-gradient-to-r from-cocoa to-brand p-5 text-white">
+        <div className="bg-gradient-to-r from-cocoa to-brand p-5 ltr:pe-10 rtl:ps-10 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2.5 text-lg font-bold text-white">
               <div className="flex size-9 items-center justify-center rounded-lg bg-white/15 text-white backdrop-blur-sm border border-white/20">

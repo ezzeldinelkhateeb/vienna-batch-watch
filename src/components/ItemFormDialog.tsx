@@ -403,7 +403,7 @@ export function ItemFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-0 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden">
-        <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-5 pb-3 border-b border-border shrink-0">
+        <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-5 pb-3 border-b border-border shrink-0 ltr:pe-12 rtl:ps-12">
           <DialogTitle>{item ? t("editItem") : t("addItem")}</DialogTitle>
         </DialogHeader>
 

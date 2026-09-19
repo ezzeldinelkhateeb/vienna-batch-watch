@@ -55,9 +55,10 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideDragHandle?: boolean;
+    hideCloseButton?: boolean;
     disableSwipeToClose?: boolean;
   }
->(({ className, children, hideDragHandle = false, disableSwipeToClose = false, style, ...props }, ref) => {
+>(({ className, children, hideDragHandle = false, hideCloseButton = false, disableSwipeToClose = false, style, ...props }, ref) => {
   const context = React.useContext(DialogContext);
   const internalId = React.useId();
   const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -207,10 +208,10 @@ const DialogContent = React.forwardRef<
           transition: isDragging ? "none" : "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)",
         }}
         className={cn(
-          // Mobile first: Docked bottom sheet, max-height bound, flex column with overflow containment
-          "fixed inset-x-0 bottom-0 z-50 flex flex-col w-full max-w-lg mx-auto max-h-[92dvh] max-h-[92svh] rounded-t-2xl border-t border-x bg-background p-4 sm:p-6 shadow-2xl duration-200",
+          // Mobile first: Docked bottom sheet, bounded below notch/status-bar with safe-area
+          "fixed inset-x-0 bottom-0 z-50 flex flex-col w-full max-w-lg mx-auto max-h-[calc(100dvh-max(1.75rem,calc(env(safe-area-inset-top)+1rem)))] rounded-t-2xl border-t border-x bg-background p-4 sm:p-6 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] shadow-2xl duration-200",
           // Desktop: Centered modal with rounded corners and bounded height
-          "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-h-[88vh] sm:rounded-xl sm:border sm:shadow-lg",
+          "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-h-[88vh] sm:rounded-xl sm:border sm:shadow-lg sm:pb-6",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
@@ -220,20 +221,25 @@ const DialogContent = React.forwardRef<
         {!hideDragHandle && (
           <div
             data-drag-handle="true"
-            className="sm:hidden flex flex-col items-center justify-center -mt-2 pb-2 w-full shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
+            className="sm:hidden flex flex-col items-center justify-center -mt-2 pb-2.5 pt-0.5 w-full shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
             aria-hidden="true"
           >
-            <div className="h-1.5 w-12 rounded-full bg-muted-foreground/30 hover:bg-muted-foreground/50 transition-colors" />
+            <div className="h-1.5 w-12 rounded-full bg-muted-foreground/35 hover:bg-muted-foreground/50 transition-colors" />
           </div>
         )}
 
         {children}
 
-        {/* Floating Close Button */}
-        <DialogPrimitive.Close className="absolute right-3.5 top-3.5 sm:right-4 sm:top-4 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted/80 opacity-80 ring-offset-background cursor-pointer transition-all hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-30 size-8 flex items-center justify-center print:hidden">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
+        {/* Floating Close Button - RTL-safe (on left in Arabic, on right in English), thumb-friendly */}
+        {!hideCloseButton && (
+          <DialogPrimitive.Close
+            className="absolute ltr:right-3.5 ltr:sm:right-4 rtl:left-3.5 rtl:sm:left-4 top-3 sm:top-4 rounded-full size-9 sm:size-8 bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground active:scale-90 transition-all flex items-center justify-center z-30 shadow-xs focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 disabled:pointer-events-none print:hidden cursor-pointer"
+            aria-label="Close"
+          >
+            <X className="h-4.5 w-4.5 sm:h-4 sm:w-4 stroke-[2.25]" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPortal>
   );
@@ -241,14 +247,14 @@ const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left shrink-0", className)} {...props} />
+  <div className={cn("flex flex-col space-y-1.5 text-start shrink-0 ltr:pe-9 rtl:ps-9", className)} {...props} />
 );
 DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom,12px))]",
+      "flex flex-col-reverse sm:flex-row sm:justify-end gap-2 shrink-0 pt-3 pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.25rem))]",
       className,
     )}
     {...props}

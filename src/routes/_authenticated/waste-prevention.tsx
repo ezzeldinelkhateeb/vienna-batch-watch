@@ -19,6 +19,11 @@ import {
   Boxes,
   Layers,
   FileSpreadsheet,
+  LayoutGrid,
+  Table,
+  ArrowUpDown,
+  Calendar,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,6 +74,21 @@ export function WastePreventionPage() {
   const [horizon, setHorizon] = useState<Horizon>("30");
   const [search, setSearch] = useState("");
   const [dispenseItem, setDispenseItem] = useState<ItemRow | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("vienna_waste_view_mode");
+      if (saved === "table" || saved === "cards") return saved;
+      return window.innerWidth < 768 ? "cards" : "table";
+    }
+    return "cards";
+  });
+
+  const handleSetViewMode = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vienna_waste_view_mode", mode);
+    }
+  };
 
   const itemsQuery = useQuery({
     queryKey: ["items"],
@@ -404,15 +424,43 @@ export function WastePreventionPage() {
             ))}
           </div>
 
-          {/* Search Bar */}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder={lang === "ar" ? "بحث في قائمة الخامات المهددة..." : "Search matrix..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pr-9 text-xs h-9 bg-background"
-            />
+          {/* Search Bar & View Mode Toggle */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder={lang === "ar" ? "بحث في قائمة الخامات المهددة..." : "Search matrix..."}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pr-9 text-xs h-9 bg-background"
+              />
+            </div>
+
+            {/* View Mode Toggle: Cards / Table */}
+            <div className="flex items-center rounded-lg border bg-card p-0.5 shrink-0 shadow-2xs">
+              <Button
+                type="button"
+                variant={viewMode === "cards" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1"
+                onClick={() => handleSetViewMode("cards")}
+                title={lang === "ar" ? "عرض الكروت (المناسب للموبايل)" : "Cards View"}
+              >
+                <LayoutGrid className="size-3.5" />
+                <span className="hidden xs:inline">{lang === "ar" ? "كروت" : "Cards"}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1"
+                onClick={() => handleSetViewMode("table")}
+                title={lang === "ar" ? "عرض الجدول الشامل" : "Table View"}
+              >
+                <Table className="size-3.5" />
+                <span className="hidden xs:inline">{lang === "ar" ? "جدول" : "Table"}</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -440,108 +488,240 @@ export function WastePreventionPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="border-b bg-muted/40 font-bold text-muted-foreground">
-                    <th className="p-3">#</th>
-                    <th className="p-3">{t("name")}</th>
-                    <th className="p-3">{t("batchNumber")}</th>
-                    <th className="p-3">{t("quantity")}</th>
-                    <th className="p-3">{t("expiryDate")}</th>
-                    <th className="p-3">{t("remaining")}</th>
-                    <th className="p-3">{t("qcStatus")}</th>
-                    <th className="p-3 text-brand">{t("suggestedLine")}</th>
-                    <th className="p-3 print:hidden text-center">{t("actions")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {matrixRows.map((item, idx) => {
-                    const days = daysUntil(item.expiry_date);
-                    const suggestedLine = suggestProductionLine(item.name);
-                    const isUltraUrgent = days <= 7;
-                    const isHighUrgent = days > 7 && days <= 30;
+            <>
+              {/* 1. Cards View (Best for Mobile & Small Screens - Hidden on Print) */}
+              {viewMode === "cards" && (
+                <div className="p-3 sm:p-4 print:hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {matrixRows.map((item, idx) => {
+                      const days = daysUntil(item.expiry_date);
+                      const suggestedLine = suggestProductionLine(item.name);
+                      const isUltraUrgent = days <= 7;
+                      const isHighUrgent = days > 7 && days <= 30;
 
-                    return (
-                      <tr
-                        key={item.id}
-                        className={`hover:bg-muted/40 transition-colors ${
-                          isUltraUrgent
-                            ? "bg-rose-50/40 dark:bg-rose-950/20"
-                            : isHighUrgent
-                            ? "bg-amber-50/30 dark:bg-amber-950/10"
-                            : ""
-                        }`}
-                      >
-                        <td className="p-3 font-mono text-muted-foreground">{idx + 1}</td>
-                        <td className="p-3 font-bold text-foreground">
-                          <div className="flex items-center gap-1.5">
-                            {isUltraUrgent && <Flame className="size-3.5 text-rose-600 shrink-0" />}
-                            <span>{item.name}</span>
+                      return (
+                        <div
+                          key={item.id}
+                          className={`rounded-xl border p-3.5 transition-all shadow-xs ${
+                            isUltraUrgent
+                              ? "border-rose-300/80 bg-rose-50/40 dark:bg-rose-950/20"
+                              : isHighUrgent
+                              ? "border-amber-300/80 bg-amber-50/30 dark:bg-amber-950/10"
+                              : "border-border/80 bg-card"
+                          }`}
+                        >
+                          {/* Header: Priority #, Urgency Countdown & QC */}
+                          <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-border/40">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold text-muted-foreground">
+                                #{idx + 1}
+                              </span>
+                              <span
+                                className={`font-bold px-2 py-0.5 rounded-full text-[11px] inline-flex items-center gap-1 ${
+                                  days < 0
+                                    ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
+                                    : days <= 7
+                                    ? "bg-rose-600 text-white animate-pulse"
+                                    : days <= 30
+                                    ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                {isUltraUrgent && <Flame className="size-3" />}
+                                {countdownText(days, t)}
+                              </span>
+                            </div>
+                            <QcBadge status={item.qc_status ?? "quarantine"} />
                           </div>
-                          {item.item_code && (
-                            <span className="text-[10px] text-muted-foreground block font-mono">
-                              {item.item_code}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 font-mono">
-                          {item.batch_number ? (
-                            <span className="rounded bg-brand/10 text-brand px-1.5 py-0.5 font-semibold">
-                              #{item.batch_number}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="p-3 font-mono font-bold text-cocoa dark:text-cream">
-                          {item.quantity} {item.unit || "كجم"}
-                        </td>
-                        <td className="p-3 font-mono">{item.expiry_date}</td>
-                        <td className="p-3">
-                          <span
-                            className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
-                              days < 0
-                                ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
-                                : days <= 7
-                                ? "bg-rose-600 text-white animate-pulse"
-                                : days <= 30
-                                ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {countdownText(days, t)}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <QcBadge status={item.qc_status ?? "quarantine"} />
-                        </td>
-                        <td className="p-3">
-                          <span className="rounded-md bg-brand/15 text-brand px-2.5 py-1 font-semibold text-[11px] border border-brand/20 inline-flex items-center gap-1">
-                            <Factory className="size-3 text-brand shrink-0" />
-                            <span>{suggestedLine}</span>
-                          </span>
-                        </td>
-                        <td className="p-3 print:hidden text-center">
+
+                          {/* Raw Material Name & Code */}
+                          <div className="pt-2.5">
+                            <h3 className="font-bold text-cocoa dark:text-cream text-base leading-snug">
+                              {item.name}
+                            </h3>
+                            {item.item_code && (
+                              <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{item.item_code}</p>
+                            )}
+                          </div>
+
+                          {/* Batch & Quantity */}
+                          <div className="mt-2.5 flex items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg text-xs font-mono">
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground font-sans text-[11px]">{t("batchNumber")}:</span>
+                              {item.batch_number ? (
+                                <span className="rounded bg-brand/10 px-1.5 py-0.5 font-bold text-brand text-xs">
+                                  #{item.batch_number}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </div>
+                            <div className="font-bold text-cocoa dark:text-cream text-sm">
+                              {item.quantity} {item.unit || "كجم"}
+                            </div>
+                          </div>
+
+                          {/* Expiry Date & Suggested Line */}
+                          <div className="mt-2.5 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-muted-foreground">{t("expiryDate")}:</span>
+                              <span className="font-mono font-bold text-destructive">{item.expiry_date}</span>
+                            </div>
+                            <div className="rounded-md bg-brand/10 text-brand px-2 py-1 text-[11px] font-semibold border border-brand/20 flex items-center gap-1.5">
+                              <Factory className="size-3 text-brand shrink-0" />
+                              <span className="truncate">{suggestedLine}</span>
+                            </div>
+                          </div>
+
+                          {/* Action Button: Quick Dispense */}
                           {canEditItems && (
                             <Button
+                              type="button"
                               size="sm"
-                              variant="default"
-                              onClick={() => setDispenseItem(item)}
-                              className="bg-brand hover:bg-brand/90 text-white text-xs font-bold gap-1 h-7 px-2.5 shadow-xs"
-                              title={t("quickDispense")}
+                              onClick={() => {
+                                navigator.vibrate?.(10);
+                                setDispenseItem(item);
+                              }}
+                              className="w-full mt-3 bg-brand hover:bg-brand/90 text-white text-xs font-bold gap-1.5 h-9 active:scale-[0.98] shadow-xs"
                             >
-                              <Factory className="size-3" />
+                              <Factory className="size-3.5" />
                               <span>{t("quickDispense")}</span>
                             </Button>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Mobile Table Scroll Guide Banner */}
+              {viewMode === "table" && (
+                <div className="flex sm:hidden items-center justify-between gap-2 bg-brand/10 border-b border-brand/20 p-2.5 text-xs text-cocoa print:hidden">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <ArrowUpDown className="size-3.5 text-brand rotate-90 shrink-0" />
+                    <span>{lang === "ar" ? "اسحب أفقياً أو انتقل لعرض الكروت" : "Swipe horizontally or view cards"}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSetViewMode("cards")}
+                    className="h-7 px-2 text-xs font-bold bg-background shrink-0"
+                  >
+                    <LayoutGrid className="size-3 me-1 text-brand" />
+                    <span>{lang === "ar" ? "عرض الكروت" : "Cards"}</span>
+                  </Button>
+                </div>
+              )}
+
+              {/* 2. Full Table View (Active when viewMode === 'table', or for Print) */}
+              <div className={`overflow-x-auto ${viewMode === "table" ? "block" : "hidden print:block"}`}>
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/40 font-bold text-muted-foreground">
+                      <th className="p-3">#</th>
+                      <th className="p-3">{t("name")}</th>
+                      <th className="p-3">{t("batchNumber")}</th>
+                      <th className="p-3">{t("quantity")}</th>
+                      <th className="p-3">{t("expiryDate")}</th>
+                      <th className="p-3">{t("remaining")}</th>
+                      <th className="p-3">{t("qcStatus")}</th>
+                      <th className="p-3 text-brand">{t("suggestedLine")}</th>
+                      <th className="p-3 print:hidden text-center">{t("actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {matrixRows.map((item, idx) => {
+                      const days = daysUntil(item.expiry_date);
+                      const suggestedLine = suggestProductionLine(item.name);
+                      const isUltraUrgent = days <= 7;
+                      const isHighUrgent = days > 7 && days <= 30;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`hover:bg-muted/40 transition-colors ${
+                            isUltraUrgent
+                              ? "bg-rose-50/40 dark:bg-rose-950/20"
+                              : isHighUrgent
+                              ? "bg-amber-50/30 dark:bg-amber-950/10"
+                              : ""
+                          }`}
+                        >
+                          <td className="p-3 font-mono text-muted-foreground">{idx + 1}</td>
+                          <td className="p-3 font-bold text-foreground">
+                            <div className="flex items-center gap-1.5">
+                              {isUltraUrgent && <Flame className="size-3.5 text-rose-600 shrink-0" />}
+                              <span>{item.name}</span>
+                            </div>
+                            {item.item_code && (
+                              <span className="text-[10px] text-muted-foreground block font-mono">
+                                {item.item_code}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono">
+                            {item.batch_number ? (
+                              <span className="rounded bg-brand/10 text-brand px-1.5 py-0.5 font-semibold">
+                                #{item.batch_number}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-cocoa dark:text-cream">
+                            {item.quantity} {item.unit || "كجم"}
+                          </td>
+                          <td className="p-3 font-mono">{item.expiry_date}</td>
+                          <td className="p-3">
+                            <span
+                              className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
+                                days < 0
+                                  ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
+                                  : days <= 7
+                                  ? "bg-rose-600 text-white animate-pulse"
+                                  : days <= 30
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {countdownText(days, t)}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <QcBadge status={item.qc_status ?? "quarantine"} />
+                          </td>
+                          <td className="p-3">
+                            <span className="rounded-md bg-brand/15 text-brand px-2.5 py-1 font-semibold text-[11px] border border-brand/20 inline-flex items-center gap-1">
+                              <Factory className="size-3 text-brand shrink-0" />
+                              <span>{suggestedLine}</span>
+                            </span>
+                          </td>
+                          <td className="p-3 print:hidden text-center">
+                            {canEditItems && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  navigator.vibrate?.(10);
+                                  setDispenseItem(item);
+                                }}
+                                className="bg-brand hover:bg-brand/90 text-white text-xs font-bold gap-1 h-8 px-2.5 active:scale-95 shadow-xs"
+                                title={t("quickDispense")}
+                              >
+                                <Factory className="size-3" />
+                                <span>{t("quickDispense")}</span>
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </main>

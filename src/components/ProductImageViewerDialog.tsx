@@ -88,10 +88,14 @@ export function ProductImageViewerDialog({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [dismissY, setDismissY] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const touchDistanceRef = useRef<number | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchStartTimeRef = useRef<number>(0);
+  const isPullingDownRef = useRef<boolean>(false);
   const lastTapRef = useRef<number>(0);
 
   // Sync active index on open
@@ -103,6 +107,8 @@ export function ProductImageViewerDialog({
       setRotation(0);
       setIsDragging(false);
       setLoaded(false);
+      setDismissY(0);
+      isPullingDownRef.current = false;
     }
   }, [open, initialIndex, photoList.length]);
 
@@ -289,7 +295,7 @@ export function ProductImageViewerDialog({
     setIsDragging(false);
   };
 
-  // Touch drag & pinch-to-zoom & swipe between photos
+  // Touch drag & pinch-to-zoom & swipe between photos & pull-down-to-dismiss
   const handleTouchStart = (e: React.TouchEvent) => {
     const now = Date.now();
     const t0 = e.touches[0];
@@ -297,6 +303,10 @@ export function ProductImageViewerDialog({
 
     if (e.touches.length === 1 && t0) {
       touchStartXRef.current = t0.clientX;
+      touchStartYRef.current = t0.clientY;
+      touchStartTimeRef.current = now;
+      isPullingDownRef.current = false;
+
       if (now - lastTapRef.current < 300) {
         handleDoubleTapOrClick(t0.clientX, t0.clientY);
       } else {
@@ -309,6 +319,8 @@ export function ProductImageViewerDialog({
       lastTapRef.current = now;
     } else if (e.touches.length === 2 && t0 && t1) {
       setIsDragging(false);
+      isPullingDownRef.current = false;
+      setDismissY(0);
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       touchDistanceRef.current = dist;
     }
@@ -318,11 +330,27 @@ export function ProductImageViewerDialog({
     const t0 = e.touches[0];
     const t1 = e.touches[1];
 
-    if (e.touches.length === 1 && isDragging && t0) {
-      setPosition({
-        x: t0.clientX - dragStart.x,
-        y: t0.clientY - dragStart.y,
-      });
+    if (e.touches.length === 1 && t0) {
+      // Pull-down-to-dismiss when zoom is unzoomed (<= 1.05)
+      if (zoom <= 1.05 && touchStartYRef.current !== null && touchStartXRef.current !== null) {
+        const deltaY = t0.clientY - touchStartYRef.current;
+        const deltaX = Math.abs(t0.clientX - touchStartXRef.current);
+
+        if (deltaY > 6 && deltaY > deltaX * 1.1) {
+          isPullingDownRef.current = true;
+          // Damped downward translation
+          const dampedY = deltaY > 160 ? 160 + (deltaY - 160) * 0.4 : deltaY;
+          setDismissY(dampedY);
+          return;
+        }
+      }
+
+      if (isDragging && !isPullingDownRef.current) {
+        setPosition({
+          x: t0.clientX - dragStart.x,
+          y: t0.clientY - dragStart.y,
+        });
+      }
     } else if (e.touches.length === 2 && touchDistanceRef.current !== null && t0 && t1) {
       const currentDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       const diff = (currentDist - touchDistanceRef.current) * 0.005;
@@ -332,8 +360,33 @@ export function ProductImageViewerDialog({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    // If pulling down to dismiss
+    if (isPullingDownRef.current && dismissY > 0) {
+      const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current);
+      const velocityY = dismissY / elapsed;
+
+      if (dismissY > 75 || velocityY > 0.4) {
+        // Dismiss smoothly
+        setDismissY(window.innerHeight || 700);
+        setTimeout(() => {
+          onOpenChange(false);
+          setDismissY(0);
+          isPullingDownRef.current = false;
+        }, 180);
+        setIsDragging(false);
+        touchDistanceRef.current = null;
+        touchStartXRef.current = null;
+        touchStartYRef.current = null;
+        return;
+      } else {
+        // Bounce back
+        setDismissY(0);
+        isPullingDownRef.current = false;
+      }
+    }
+
     // If not zoomed in, detect horizontal swipe between photos
-    if (zoom <= 1.05 && touchStartXRef.current !== null && e.changedTouches[0]) {
+    if (zoom <= 1.05 && touchStartXRef.current !== null && e.changedTouches[0] && !isPullingDownRef.current) {
       const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
       if (Math.abs(diffX) > 60) {
         if (diffX > 0) {
@@ -348,8 +401,10 @@ export function ProductImageViewerDialog({
       }
     }
     setIsDragging(false);
+    isPullingDownRef.current = false;
     touchDistanceRef.current = null;
     touchStartXRef.current = null;
+    touchStartYRef.current = null;
   };
 
   // Fullscreen toggle
@@ -403,8 +458,8 @@ export function ProductImageViewerDialog({
             {item.name || "Product Image Viewer"}
           </DialogPrimitive.Title>
 
-          {/* Top Header Bar */}
-          <div className="relative z-30 flex items-center justify-between border-b border-white/10 bg-gradient-to-b from-black/90 to-black/70 px-4 py-3 sm:px-6">
+          {/* Top Header Bar with Safe-Area Clearance */}
+          <div className="relative z-30 flex items-center justify-between border-b border-white/10 bg-gradient-to-b from-black/95 via-black/85 to-black/70 px-4 py-3 sm:px-6 pt-[max(0.875rem,calc(env(safe-area-inset-top)+0.625rem))]">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/20 border border-brand/40 text-brand">
                 <Sparkles className="size-4" />
@@ -433,16 +488,16 @@ export function ProductImageViewerDialog({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 onClick={handleDownload}
                 title={t("downloadPhoto")}
-                className="size-9 rounded-full text-white/80 hover:bg-white/15 hover:text-white"
+                className="size-10 sm:size-9 rounded-full text-white/80 hover:bg-white/15 hover:text-white transition-all active:scale-95"
               >
-                <Download className="size-4" />
+                <Download className="size-4.5 sm:size-4" />
               </Button>
               <Button
                 type="button"
@@ -450,7 +505,7 @@ export function ProductImageViewerDialog({
                 size="icon"
                 onClick={toggleFullscreen}
                 title={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
-                className="hidden sm:inline-flex size-9 rounded-full text-white/80 hover:bg-white/15 hover:text-white"
+                className="hidden sm:inline-flex size-9 rounded-full text-white/80 hover:bg-white/15 hover:text-white transition-all active:scale-95"
               >
                 {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </Button>
@@ -460,12 +515,20 @@ export function ProductImageViewerDialog({
                 size="icon"
                 onClick={() => onOpenChange(false)}
                 title={t("close")}
-                className="size-9 rounded-full text-white/90 bg-white/10 hover:bg-white/20 hover:text-white"
+                aria-label={t("close")}
+                className="size-10 sm:size-9 rounded-full text-white bg-white/20 hover:bg-white/30 active:scale-95 transition-all shadow-md backdrop-blur-md flex items-center justify-center shrink-0 focus:outline-none focus:ring-2 focus:ring-white/40"
               >
-                <X className="size-5" />
+                <X className="size-5 sm:size-4 stroke-[2.25]" />
               </Button>
             </div>
           </div>
+
+          {/* Pull-down gesture indicator for mobile when unzoomed */}
+          {zoom <= 1.05 && (
+            <div className="sm:hidden flex items-center justify-center py-1 select-none pointer-events-none z-30">
+              <div className="h-1 w-10 rounded-full bg-white/30" />
+            </div>
+          )}
 
           {/* Main Interactive Zoom Canvas (Strict LTR for coordinate stability) */}
           <div
@@ -480,6 +543,11 @@ export function ProductImageViewerDialog({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
             onDoubleClick={(e) => handleDoubleTapOrClick(e.clientX, e.clientY)}
+            style={{
+              transform: dismissY > 0 ? `translate3d(0, ${dismissY}px, 0)` : undefined,
+              opacity: dismissY > 0 ? Math.max(0.35, 1 - dismissY / 350) : 1,
+              transition: isPullingDownRef.current ? "none" : "transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease",
+            }}
             className={`relative flex flex-1 items-center justify-center overflow-hidden touch-none ${
               isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-zoom-in"
             }`}
@@ -543,7 +611,7 @@ export function ProductImageViewerDialog({
           </div>
 
           {/* Bottom Floating Control Dock & Product Details */}
-          <div className="relative z-30 flex flex-col items-center gap-2 border-t border-white/10 bg-gradient-to-t from-black/95 via-black/85 to-black/60 px-4 py-2.5 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="relative z-30 flex flex-col items-center gap-2 border-t border-white/10 bg-gradient-to-t from-black/95 via-black/85 to-black/60 px-4 py-2.5 sm:px-6 pb-[max(0.875rem,calc(env(safe-area-inset-bottom)+0.625rem))]">
             {/* Active Photo Caption Banner if available */}
             {currentPhoto.caption && (
               <div className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/20 px-3.5 py-1 text-xs font-semibold text-amber-200 shadow-md backdrop-blur-md max-w-[90vw] truncate">
@@ -639,6 +707,22 @@ export function ProductImageViewerDialog({
                   <span>{savingRotation ? t("saving") : t("saveRotation")}</span>
                 </Button>
               )}
+
+              <div className="mx-1 h-3.5 w-px bg-white/20" />
+
+              {/* Thumb-friendly mobile Close button right in the bottom dock */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                title={t("close")}
+                aria-label={t("close")}
+                className="h-7 px-2.5 rounded-full text-white/95 bg-white/15 hover:bg-white/25 active:scale-95 text-xs font-semibold gap-1 transition-all"
+              >
+                <X className="size-3.5 stroke-[2.5]" />
+                <span>{t("close")}</span>
+              </Button>
             </div>
 
             {/* Metadata Footer bar */}

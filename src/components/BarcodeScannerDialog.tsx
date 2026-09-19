@@ -257,8 +257,8 @@ export function BarcodeScannerDialog({ open, onOpenChange, onDetected }: Props) 
               </div>
             </div>
 
-            {/* Camera Controls */}
-            <div className="flex items-center gap-1">
+            {/* Camera Controls with clearance for corner close button */}
+            <div className="flex items-center gap-1 ltr:me-9 rtl:ms-9">
               {torchSupported && (
                 <Button
                   type="button"

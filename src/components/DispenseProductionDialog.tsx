@@ -183,7 +183,7 @@ export function DispenseProductionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 overflow-hidden bg-background flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
         {/* Header Bar (Pinned at top) */}
-        <div className="bg-gradient-to-r from-cocoa to-brand p-4 sm:p-5 text-white shrink-0">
+        <div className="bg-gradient-to-r from-cocoa to-brand p-4 sm:p-5 ltr:pe-10 rtl:ps-10 text-white shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Button

@@ -82,8 +82,8 @@ export function AppNavigationDrawer() {
         side={isRtl ? "right" : "left"}
         className="w-[86vw] max-w-[360px] p-0 flex flex-col bg-card border-border/80 text-foreground overflow-hidden shadow-2xl"
       >
-        {/* Drawer Header with Factory Branding */}
-        <SheetHeader className="p-4 sm:p-5 ltr:pe-12 rtl:ps-12 brand-header text-start shrink-0 border-b border-white/10 relative">
+        {/* Drawer Header with Factory Branding & Safe Area Inset */}
+        <SheetHeader className="p-4 sm:p-5 pt-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] ltr:pe-12 rtl:ps-12 brand-header text-start shrink-0 border-b border-white/10 relative">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               {brandLogo ? (
@@ -357,8 +357,8 @@ export function AppNavigationDrawer() {
           </div>
         </div>
 
-        {/* Drawer Footer */}
-        <div className="p-3 sm:p-4 border-t border-border/80 bg-muted/30 shrink-0 space-y-2">
+        {/* Drawer Footer with Safe Area Bottom */}
+        <div className="p-3 sm:p-4 border-t border-border/80 bg-muted/30 shrink-0 space-y-2 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))]">
           <Button
             type="button"
             variant="ghost"

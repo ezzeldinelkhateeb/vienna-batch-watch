@@ -843,13 +843,14 @@ export function MonthlyAuditPage() {
                         <button
                           type="button"
                           disabled={!canEditItems}
-                          onClick={() =>
+                          onClick={() => {
+                            navigator.vibrate?.(10);
                             toggleItemReview.mutate({
                               itemId: item.id,
                               nextState: !isReviewed,
-                            })
-                          }
-                          className={`flex size-6 shrink-0 items-center justify-center rounded-md border transition-all cursor-pointer ${
+                            });
+                          }}
+                          className={`flex size-8 sm:size-7 shrink-0 items-center justify-center rounded-lg border transition-all active:scale-95 cursor-pointer ${
                             isReviewed
                               ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                               : "border-border/80 bg-background hover:border-brand"
@@ -949,10 +950,63 @@ export function MonthlyAuditPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Dedicated Mobile-Friendly Audit Button */}
+                    {canEditItems && (
+                      <Button
+                        type="button"
+                        variant={isReviewed ? "outline" : "default"}
+                        size="sm"
+                        onClick={() => {
+                          navigator.vibrate?.(15);
+                          toggleItemReview.mutate({
+                            itemId: item.id,
+                            nextState: !isReviewed,
+                          });
+                        }}
+                        className={`w-full mt-3 h-9 text-xs font-bold gap-1.5 active:scale-[0.98] transition-all ${
+                          isReviewed
+                            ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                            : "bg-brand hover:bg-brand/90 text-white shadow-xs"
+                        }`}
+                      >
+                        {isReviewed ? (
+                          <>
+                            <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                            <span>{lang === "ar" ? "تم اعتماد التدقيق ✅ (اضغط للإلغاء)" : "Reviewed ✅ (Tap to undo)"}</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCheck className="size-3.5 shrink-0" />
+                            <span>{lang === "ar" ? "اعتماد وتدقيق الباتش الآن" : "Sign Off & Review Batch"}</span>
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Mobile Table Scroll Guide Banner */}
+        {viewMode === "table" && (
+          <div className="flex sm:hidden items-center justify-between gap-2 rounded-xl bg-brand/10 border border-brand/20 p-2.5 text-xs text-cocoa print:hidden">
+            <span className="flex items-center gap-1.5 font-medium">
+              <ArrowUpDown className="size-3.5 text-brand rotate-90 shrink-0" />
+              <span>{lang === "ar" ? "اسحب أفقياً أو انتقل لعرض الكروت" : "Swipe horizontally or view cards"}</span>
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleSetViewMode("cards")}
+              className="h-7 px-2 text-xs font-bold bg-background shrink-0"
+            >
+              <LayoutGrid className="size-3 me-1 text-brand" />
+              <span>{lang === "ar" ? "عرض الكروت" : "Cards"}</span>
+            </Button>
           </div>
         )}
 
@@ -1000,19 +1054,20 @@ export function MonthlyAuditPage() {
                           <button
                             type="button"
                             disabled={!canEditItems}
-                            onClick={() =>
+                            onClick={() => {
+                              navigator.vibrate?.(10);
                               toggleItemReview.mutate({
                                 itemId: item.id,
                                 nextState: !isReviewed,
-                              })
-                            }
-                            className={`flex size-5 shrink-0 items-center justify-center rounded border transition-all cursor-pointer print:hidden ${
+                              });
+                            }}
+                            className={`flex size-7 sm:size-6 shrink-0 items-center justify-center rounded-md border transition-all active:scale-90 cursor-pointer print:hidden ${
                               isReviewed
                                 ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                                 : "border-border/80 bg-background hover:border-brand"
                             }`}
                           >
-                            {isReviewed && <CheckCheck className="size-3.5" />}
+                            {isReviewed && <CheckCheck className="size-4 sm:size-3.5" />}
                           </button>
 
                           {/* Print checkbox box */}

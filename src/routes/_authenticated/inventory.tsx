@@ -1060,8 +1060,8 @@ function InventoryPage() {
           )}
         </div>
 
-        {/* Enhanced Toolbar: Search, Sort Mode, Storage Location, Views & Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Enhanced Toolbar: Sticky on Mobile for quick search & barcode scan */}
+        <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 sm:static sm:mx-0 sm:px-0 sm:py-0 bg-background/95 backdrop-blur-md border-b sm:border-b-0 border-border/70 shadow-2xs sm:shadow-none flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
             {/* Search with Barcode Scanner */}
             <div className="flex gap-1.5 w-full sm:w-64">
@@ -1354,17 +1354,21 @@ function InventoryPage() {
                       )}
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-1.5 border-t pt-2">
-                      <div className="flex items-center gap-1">
+                    <div className="mt-3.5 border-t border-border/80 pt-2.5 space-y-2">
+                      {/* Row 1: Primary Operations (فحص QC & صرف للإنتاج) */}
+                      <div className="grid grid-cols-2 gap-2">
                         {canEditItems && (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="gap-1 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-semibold shadow-xs"
-                            onClick={() => setQuickQcItem(item)}
+                            className="w-full gap-1.5 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-bold shadow-2xs h-9"
+                            onClick={() => {
+                              navigator.vibrate?.(15);
+                              setQuickQcItem(item);
+                            }}
                           >
-                            <ShieldCheck className="size-3.5 text-brand" />
-                            <span>{t("inspectQc")}</span>
+                            <ShieldCheck className="size-4 text-brand shrink-0" />
+                            <span className="truncate">{t("inspectQc")}</span>
                           </Button>
                         )}
 
@@ -1372,54 +1376,74 @@ function InventoryPage() {
                           <Button
                             size="sm"
                             variant="default"
-                            className="gap-1 text-xs bg-brand hover:bg-brand/90 text-white font-semibold shadow-xs"
-                            onClick={() => setDispenseItem(item)}
+                            className="w-full gap-1.5 text-xs bg-brand hover:bg-brand/90 text-white font-bold shadow-2xs h-9"
+                            onClick={() => {
+                              navigator.vibrate?.(15);
+                              setDispenseItem(item);
+                            }}
                             title={t("dispenseToProduction")}
                           >
-                            <Factory className="size-3.5" />
-                            <span>{t("dispenseToProduction")}</span>
+                            <Factory className="size-4 shrink-0" />
+                            <span className="truncate">{t("dispenseToProduction")}</span>
                           </Button>
                         )}
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="size-8 p-0 text-muted-foreground hover:text-foreground"
-                          title={t("movementHistory")}
-                          onClick={() => setMovementsItem(item)}
-                        >
-                          <History className="size-3.5" />
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="size-8 p-0 text-muted-foreground hover:text-brand"
-                          title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
-                          onClick={() => setPrintLabelItem(item)}
-                        >
-                          <Tag className="size-3.5" />
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1 text-xs text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                          title={t("shareViaWhatsApp")}
-                          onClick={() => shareItemOnWhatsApp(item)}
-                        >
-                          <MessageCircle className="size-3.5" />
-                          <span className="hidden sm:inline">{t("shareViaWhatsApp")}</span>
-                        </Button>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      {/* Row 2: Secondary Tools Ribbon - All buttons preserved with comfortable touch targets */}
+                      <div className="flex items-center justify-between gap-1 overflow-x-auto py-0.5 scrollbar-none">
+                        {/* Movements History */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                          title={t("movementHistory")}
+                          onClick={() => {
+                            navigator.vibrate?.(10);
+                            setMovementsItem(item);
+                          }}
+                        >
+                          <History className="size-3.5 text-brand" />
+                          <span className="inline">{t("movementHistory")}</span>
+                        </Button>
+
+                        {/* Thermal Barcode Label */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 text-[11px] gap-1 text-muted-foreground hover:text-brand hover:bg-brand/10 shrink-0"
+                          title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
+                          onClick={() => {
+                            navigator.vibrate?.(10);
+                            setPrintLabelItem(item);
+                          }}
+                        >
+                          <Tag className="size-3.5 text-amber-600" />
+                          <span className="inline">{lang === "ar" ? "ملصق" : "Label"}</span>
+                        </Button>
+
+                        {/* WhatsApp Share */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 text-[11px] gap-1 text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10 shrink-0"
+                          title={t("shareViaWhatsApp")}
+                          onClick={() => {
+                            navigator.vibrate?.(10);
+                            shareItemOnWhatsApp(item);
+                          }}
+                        >
+                          <MessageCircle className="size-3.5" />
+                          <span className="inline">{lang === "ar" ? "واتساب" : "Share"}</span>
+                        </Button>
+
+                        {/* Edit */}
                         {canEditItems && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="gap-1 text-xs"
+                            className="h-8 px-2 text-[11px] gap-1 text-foreground hover:bg-muted shrink-0"
                             onClick={() => {
+                              navigator.vibrate?.(10);
                               setEditing(item);
                               setDialogOpen(true);
                             }}
@@ -1428,14 +1452,19 @@ function InventoryPage() {
                             <span>{t("edit")}</span>
                           </Button>
                         )}
+
+                        {/* Delete */}
                         {canDeleteItems && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="gap-1 text-xs text-destructive hover:text-destructive"
+                            className="h-8 px-2 text-[11px] gap-1 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
                             disabled={remove.isPending}
                             onClick={() => {
-                              if (window.confirm(t("deleteConfirm"))) remove.mutate(item);
+                              if (window.confirm(t("deleteConfirm"))) {
+                                navigator.vibrate?.(25);
+                                remove.mutate(item);
+                              }
                             }}
                           >
                             <Trash2 className="size-3.5" />
@@ -1450,8 +1479,18 @@ function InventoryPage() {
             })}
           </div>
         ) : (
-          /* Table View */
+          /* Table View with Mobile Scroll Guidance */
           <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+            <div className="sm:hidden px-3 py-1.5 text-[11px] font-medium text-muted-foreground bg-muted/40 border-b flex items-center justify-between">
+              <span>↔️ {lang === "ar" ? "اسحب الجدول أفقياً لعرض كافة الأعمدة" : "Swipe horizontally to view all columns"}</span>
+              <button
+                type="button"
+                onClick={() => handleSetViewMode("cards")}
+                className="text-brand font-bold underline"
+              >
+                {lang === "ar" ? "عرض البطاقات" : "Cards View"}
+              </button>
+            </div>
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-muted/60 text-start">
                 <tr>
