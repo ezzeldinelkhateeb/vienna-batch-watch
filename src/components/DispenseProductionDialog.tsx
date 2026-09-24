@@ -116,9 +116,12 @@ export function DispenseProductionDialog({
       const activeLine = customLine.trim() || selectedLine;
       const shouldArchive = remainingQty === 0;
       const nowIso = new Date().toISOString();
+      const dateEncoded = encodeURIComponent(nowIso);
+      const emailEncoded = encodeURIComponent(user?.email || "");
       const cleanOldNotes = stripArchiveTag(item.notes);
+      const archiveTag = `[ARCHIVED:depleted:${dateEncoded}:${emailEncoded}:]`;
       const updatedNotes = shouldArchive
-        ? (cleanOldNotes ? `${cleanOldNotes}\n[ARCHIVED:depleted:${nowIso}:${user?.email || ""}:]` : `[ARCHIVED:depleted:${nowIso}:${user?.email || ""}:]`)
+        ? (cleanOldNotes ? `${cleanOldNotes}\n${archiveTag}` : archiveTag)
         : cleanOldNotes;
 
       // 1. Update items table with remaining quantity (and archive flags if 0)

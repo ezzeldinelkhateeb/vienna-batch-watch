@@ -50,6 +50,27 @@ export function stripArchiveTag(notes: string | null | undefined): string {
 }
 
 /**
+ * Safely format an archive date string without ever throwing or displaying "Invalid Date"
+ */
+export function formatArchiveDate(
+  dateStr: string | null | undefined,
+  lang: "ar" | "en" = "ar"
+): string {
+  if (!dateStr || dateStr === "null" || dateStr === "undefined") return "";
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  } catch {}
+  return "";
+}
+
+/**
  * Get readable archive details and reason badge metadata
  */
 export function getArchiveMeta(
@@ -77,20 +98,63 @@ export function getArchiveMeta(
 
   if (item.archived_reason) {
     reason = item.archived_reason as ArchiveReason;
-  } else if (item.notes) {
-    const match = item.notes.match(/\[ARCHIVED:([^:]*):([^:]*)(?::([^:]*))?(?::([^\]]*))?\]/i);
-    if (match) {
-      reason = (match[1] as ArchiveReason) || "manual";
-      date = match[2] || date;
-      by = match[3] || by;
-      if (match[4]) {
-        try {
-          extraInfo = decodeURIComponent(match[4]);
-        } catch {
-          extraInfo = match[4];
+  }
+
+  if (item.notes) {
+    const rawTagMatch = item.notes.match(/\[ARCHIVED:([a-z_]+):([^\]]+)\]/i);
+    if (rawTagMatch) {
+      if (!item.archived_reason) {
+        reason = (rawTagMatch[1].toLowerCase() as ArchiveReason) || "manual";
+      }
+      const payload = rawTagMatch[2];
+      // Check if payload starts with an unencoded ISO date: YYYY-MM-DD...
+      const isoPrefixMatch = payload.match(/^(\d{4}-\d{2}-\d{2}(?:T[0-9:.]+Z?)?)/i);
+      if (isoPrefixMatch) {
+        date = isoPrefixMatch[1];
+        const rest = payload.slice(isoPrefixMatch[0].length).replace(/^:/, "");
+        const parts = rest.split(":");
+        if (parts[0]) by = decodeURIComponent(parts[0]);
+        if (parts[1]) {
+          try {
+            extraInfo = decodeURIComponent(parts[1]);
+          } catch {
+            extraInfo = parts[1];
+          }
+        }
+      } else {
+        const parts = payload.split(":");
+        if (parts[0]) {
+          try {
+            date = decodeURIComponent(parts[0]);
+          } catch {
+            date = parts[0];
+          }
+        }
+        if (parts[1]) by = decodeURIComponent(parts[1]);
+        if (parts[2]) {
+          try {
+            extraInfo = decodeURIComponent(parts[2]);
+          } catch {
+            extraInfo = parts[2];
+          }
         }
       }
     }
+  }
+
+  // Ensure date is a valid date object, else fallback gracefully
+  if (date) {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
+        const dOnly = new Date(date.slice(0, 10));
+        date = !isNaN(dOnly.getTime()) ? date.slice(0, 10) : (item.updated_at || null);
+      } else {
+        date = item.updated_at || null;
+      }
+    }
+  } else {
+    date = item.archived_at || item.updated_at || null;
   }
 
   const labelsAr: Record<ArchiveReason, string> = {
@@ -131,7 +195,7 @@ export function getArchiveMeta(
 
 export interface ExecuteStockExitParams {
   item: ItemRow;
-  exitQty: number;
+  exitQty?: number | null;
   reason: ArchiveReason;
   targetOrCustomer?: string;
   priceOrInvoice?: string;
@@ -159,11 +223,10 @@ export async function executeStockExitAndArchive({
   error?: string;
 }> {
   const currentQty = Number(item.quantity) || 0;
-  const numExitQty = Math.max(0, parseFloat(exitQty.toFixed(4)));
-  const remainingQty = Math.max(0, parseFloat((currentQty - numExitQty).toFixed(4)));
-
-  // An item should be archived if remaining quantity reaches 0 OR forceArchive is explicitly requested
-  const shouldArchive = forceArchive || remainingQty === 0;
+  const numExitQty = exitQty != null && !isNaN(Number(exitQty)) ? Math.max(0, parseFloat(Number(exitQty).toFixed(4))) : 0;
+  // An item should be archived if forceArchive is true OR reason is depleted OR remaining quantity reaches 0
+  const shouldArchive = forceArchive || reason === "depleted" || (currentQty > 0 && numExitQty >= currentQty);
+  const remainingQty = shouldArchive ? 0 : Math.max(0, parseFloat((currentQty - numExitQty).toFixed(4)));
 
   const nowIso = new Date().toISOString();
   const cleanOldNotes = stripArchiveTag(item.notes);
@@ -173,9 +236,11 @@ export async function executeStockExitAndArchive({
     updatedNotes = updatedNotes ? `${updatedNotes}\n${notes.trim()}` : notes.trim();
   }
 
+  const dateEncoded = encodeURIComponent(nowIso);
+  const emailEncoded = encodeURIComponent(currentUser?.email || "");
   const extraEncoded = targetOrCustomer.trim() ? encodeURIComponent(targetOrCustomer.trim()) : "";
   if (shouldArchive) {
-    const archiveTag = `[ARCHIVED:${reason}:${nowIso}:${currentUser?.email || ""}:${extraEncoded}]`;
+    const archiveTag = `[ARCHIVED:${reason}:${dateEncoded}:${emailEncoded}:${extraEncoded}]`;
     updatedNotes = updatedNotes ? `${updatedNotes}\n${archiveTag}` : archiveTag;
   }
 
@@ -319,7 +384,7 @@ export async function restoreArchivedItem({
 }): Promise<{ success: boolean; error?: string }> {
   const nowIso = new Date().toISOString();
   const cleanNotes = stripArchiveTag(item.notes);
-  const qtyToSet = newQuantity !== undefined && newQuantity !== null ? newQuantity : (Number(item.quantity) || 0);
+  const qtyToSet = newQuantity !== undefined ? newQuantity : (item.quantity ?? null);
 
   try {
     const fullPayload: Record<string, any> = {
@@ -369,10 +434,13 @@ export async function restoreArchivedItem({
         quantity_dispensed: 0,
         unit: item.unit || "كجم",
         previous_quantity: Number(item.quantity) || 0,
-        remaining_quantity: qtyToSet,
+        remaining_quantity: qtyToSet ?? 0,
         production_line: "استعادة للمخزون النشط",
         recipient_name: currentUser?.email || null,
-        notes: `تمت استعادة الصنف من الأرشيف بنجاح برصيد ${qtyToSet} ${item.unit || "كجم"}`,
+        notes:
+          qtyToSet != null
+            ? `تمت استعادة الصنف من الأرشيف بنجاح برصيد ${qtyToSet} ${item.unit || "كجم"}`
+            : `تمت استعادة الصنف من الأرشيف بنجاح`,
         dispensed_by: currentUser?.id || null,
         dispensed_by_email: currentUser?.email || null,
       });

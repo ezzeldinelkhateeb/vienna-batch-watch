@@ -5,7 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { useRegisterBackModal } from "@/lib/modal-stack";
 import { type ItemRow } from "@/components/ItemFormDialog";
-import { restoreArchivedItem, getArchiveMeta } from "@/lib/archive";
+import { restoreArchivedItem, getArchiveMeta, formatArchiveDate } from "@/lib/archive";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: ItemRow | null;
-  onCompleted: () => void;
+  onCompleted?: () => void;
+  onRestored?: () => void;
 }
 
 export function RestoreArchivedItemDialog({
@@ -30,6 +31,7 @@ export function RestoreArchivedItemDialog({
   onOpenChange,
   item,
   onCompleted,
+  onRestored,
 }: Props) {
   useRegisterBackModal(open, () => onOpenChange(false), "restore-archive-modal");
   const { t, lang } = useI18n();
@@ -40,15 +42,15 @@ export function RestoreArchivedItemDialog({
 
   useEffect(() => {
     if (open && item) {
-      setQuantity(item.quantity != null ? item.quantity.toString() : "0");
+      setQuantity(item.quantity != null ? item.quantity.toString() : "");
     }
   }, [open, item]);
 
   if (!item) return null;
 
   const archiveMeta = getArchiveMeta(item, lang);
-  const numQty = parseFloat(quantity);
-  const isValidQty = !isNaN(numQty) && numQty >= 0;
+  const numQty = quantity.trim() === "" ? null : parseFloat(quantity);
+  const isValidQty = numQty === null || (!isNaN(numQty) && numQty >= 0);
 
   const handleRestore = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +75,8 @@ export function RestoreArchivedItemDialog({
           : `Item "${item.name}" restored to active inventory ✨`
       );
 
-      onCompleted();
+      onRestored?.();
+      onCompleted?.();
       onOpenChange(false);
     } catch (err: any) {
       console.error("Restore item error:", err);
@@ -126,7 +129,7 @@ export function RestoreArchivedItemDialog({
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">{lang === "ar" ? "تاريخ الأرشفة:" : "Archived Date:"}</span>
                 <span className="font-mono text-foreground">
-                  {new Date(archiveMeta.date).toLocaleDateString("ar-EG")}
+                  {formatArchiveDate(archiveMeta.date, lang)}
                 </span>
               </div>
             )}
@@ -134,17 +137,19 @@ export function RestoreArchivedItemDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="restore-quantity" className="text-xs font-semibold text-foreground">
-              {lang === "ar" ? `الرصيد المتاح عند الاستعادة (${item.unit || "كجم"}):` : `Available Balance on Restore (${item.unit || "kg"}):`}
+              {lang === "ar"
+                ? `الرصيد المتاح عند الاستعادة (${item.unit || "كجم"}) (اختياري):`
+                : `Available Balance on Restore (${item.unit || "kg"}) (Optional):`}
             </Label>
             <Input
               id="restore-quantity"
               type="number"
               step="any"
               min="0"
+              placeholder={lang === "ar" ? "بدون تحديد كمية أو أدخل الرصيد" : "Leave empty or enter balance"}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               className="font-mono text-base font-bold h-10"
-              required
             />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {lang === "ar"

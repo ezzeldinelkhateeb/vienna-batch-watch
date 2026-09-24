@@ -65,7 +65,7 @@ import { DispenseProductionDialog } from "@/components/DispenseProductionDialog"
 import { StockMovementHistoryDialog } from "@/components/StockMovementHistoryDialog";
 import { StockExitArchiveDialog } from "@/components/StockExitArchiveDialog";
 import { RestoreArchivedItemDialog } from "@/components/RestoreArchivedItemDialog";
-import { isItemArchived, getArchiveMeta } from "@/lib/archive";
+import { isItemArchived, getArchiveMeta, formatArchiveDate, stripArchiveTag } from "@/lib/archive";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1475,7 +1475,7 @@ function InventoryPage() {
                             </div>
                             {meta.date && (
                               <span className="text-[10px] font-mono opacity-80 shrink-0">
-                                {new Date(meta.date).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}
+                                {formatArchiveDate(meta.date, lang)}
                               </span>
                             )}
                           </div>
@@ -1600,9 +1600,9 @@ function InventoryPage() {
                         </div>
                       </div>
 
-                      {(item.qc_notes || item.notes) && (
+                      {(item.qc_notes || stripArchiveTag(item.notes)) && (
                         <p className="text-xs text-muted-foreground line-clamp-2">
-                          {item.qc_notes || item.notes}
+                          {item.qc_notes || stripArchiveTag(item.notes)}
                         </p>
                       )}
                     </div>
@@ -1954,9 +1954,9 @@ function InventoryPage() {
                             <span className="text-cocoa font-medium block truncate" title={item.qc_notes}>
                               🔬 {item.qc_notes}
                             </span>
-                          ) : item.notes ? (
-                            <span className="text-muted-foreground truncate block" title={item.notes}>
-                              {item.notes}
+                          ) : stripArchiveTag(item.notes) ? (
+                            <span className="text-muted-foreground truncate block" title={stripArchiveTag(item.notes) || ""}>
+                              {stripArchiveTag(item.notes)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground/60">—</span>
@@ -2194,6 +2194,10 @@ function InventoryPage() {
           void queryClient.invalidateQueries({ queryKey: ["items"] });
           void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
         }}
+        onCompleted={() => {
+          void queryClient.invalidateQueries({ queryKey: ["items"] });
+          void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+        }}
       />
 
       <RestoreArchivedItemDialog
@@ -2201,6 +2205,10 @@ function InventoryPage() {
         onOpenChange={(open) => !open && setRestoreItem(null)}
         item={restoreItem}
         onRestored={() => {
+          void queryClient.invalidateQueries({ queryKey: ["items"] });
+          void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+        }}
+        onCompleted={() => {
           void queryClient.invalidateQueries({ queryKey: ["items"] });
           void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
         }}

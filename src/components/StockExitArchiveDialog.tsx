@@ -37,7 +37,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: ItemRow | null;
-  onCompleted: () => void;
+  onCompleted?: () => void;
+  onArchived?: () => void;
 }
 
 export function StockExitArchiveDialog({
@@ -45,40 +46,44 @@ export function StockExitArchiveDialog({
   onOpenChange,
   item,
   onCompleted,
+  onArchived,
 }: Props) {
   useRegisterBackModal(open, () => onOpenChange(false), "stock-exit-archive-modal");
   const { t, lang } = useI18n();
   const { user } = useAuth();
 
-  const [reason, setReason] = useState<ArchiveReason>("sold");
+  const [reason, setReason] = useState<ArchiveReason>("depleted");
   const [exitQty, setExitQty] = useState<string>("");
   const [targetOrCustomer, setTargetOrCustomer] = useState<string>("");
   const [priceOrInvoice, setPriceOrInvoice] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [forceArchive, setForceArchive] = useState<boolean>(false);
+  const [forceArchive, setForceArchive] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
 
-  const currentQty = Number(item?.quantity) || 0;
+  const hasRecordedQty = item?.quantity != null && !isNaN(Number(item.quantity));
+  const currentQty = hasRecordedQty ? Number(item?.quantity) : 0;
   const numExitQty = parseFloat(exitQty) || 0;
-  const remainingQty = Math.max(0, parseFloat((currentQty - numExitQty).toFixed(4)));
+  const remainingQty = hasRecordedQty ? Math.max(0, parseFloat((currentQty - numExitQty).toFixed(4))) : 0;
 
-  const isInvalidQty = numExitQty < 0 || numExitQty > currentQty;
-  const willDeplete = numExitQty >= currentQty || remainingQty === 0;
+  // Quantity is invalid only if strictly negative
+  const isInvalidQty = numExitQty < 0;
+  const willDeplete = !hasRecordedQty || numExitQty >= currentQty || remainingQty === 0;
 
   // Reset state when opening dialog
   useEffect(() => {
     if (open && item) {
-      const isZero = (Number(item.quantity) || 0) <= 0;
-      setReason(isZero ? "depleted" : "sold");
-      setExitQty(isZero ? "0" : (item.quantity?.toString() || "0"));
+      const hasQty = item.quantity != null && !isNaN(Number(item.quantity));
+      setReason("depleted");
+      setExitQty(hasQty && (Number(item.quantity) || 0) > 0 ? item.quantity!.toString() : "");
       setTargetOrCustomer("");
       setPriceOrInvoice("");
       setNotes("");
-      setForceArchive(isZero);
+      setForceArchive(true); // Default to archiving!
     }
   }, [open, item]);
 
   const handleQuickPercent = (percent: number) => {
+    if (!hasRecordedQty || currentQty <= 0) return;
     const calc = (currentQty * percent) / 100;
     setExitQty(parseFloat(calc.toFixed(3)).toString());
   };
@@ -87,14 +92,9 @@ export function StockExitArchiveDialog({
     e.preventDefault();
     if (!item || isInvalidQty) return;
 
-    // If reason is depleted/manual with 0 current quantity, exitQty can be 0
-    if (numExitQty === 0 && currentQty > 0 && !forceArchive && reason !== "depleted") {
-      toast.error(lang === "ar" ? "يرجى تحديد الكمية المراد إخراجها" : "Please specify quantity to exit");
-      return;
-    }
-
     setLoading(true);
     try {
+      const shouldArchive = forceArchive || willDeplete || reason === "depleted" || !hasRecordedQty;
       const res = await executeStockExitAndArchive({
         item,
         exitQty: numExitQty,
@@ -102,7 +102,7 @@ export function StockExitArchiveDialog({
         targetOrCustomer: targetOrCustomer.trim(),
         priceOrInvoice: priceOrInvoice.trim(),
         notes: notes.trim(),
-        forceArchive: forceArchive || willDeplete || reason === "depleted",
+        forceArchive: shouldArchive,
         currentUser: user,
       });
 
@@ -115,7 +115,7 @@ export function StockExitArchiveDialog({
       if (res.wasArchived) {
         toast.success(
           lang === "ar"
-            ? `تم إخراج الكمية ونقل الصنف "${item.name}" إلى الأرشيف بنجاح 📦`
+            ? `تم نقل الصنف "${item.name}" إلى الأرشيف بنجاح 📦`
             : `Item "${item.name}" moved to Archive successfully 📦`
         );
       } else {
@@ -126,7 +126,9 @@ export function StockExitArchiveDialog({
         );
       }
 
-      onCompleted();
+      // Invoke callbacks safely
+      onArchived?.();
+      onCompleted?.();
       onOpenChange(false);
     } catch (err: any) {
       console.error("Stock exit error:", err);
@@ -175,7 +177,7 @@ export function StockExitArchiveDialog({
             <div>
               <span className="text-[11px] text-muted-foreground block">{t("currentStockBalance")}</span>
               <span className="text-base font-bold text-amber-700 dark:text-amber-400 font-mono">
-                {currentQty} {item.unit || "كجم"}
+                {hasRecordedQty && currentQty > 0 ? `${currentQty} ${item.unit || "كجم"}` : (lang === "ar" ? "غير محدد / اختياري" : "Not specified")}
               </span>
             </div>
             <div className="text-end">
@@ -194,14 +196,40 @@ export function StockExitArchiveDialog({
               {lang === "ar" ? "نوع العملية / سبب الإخراج:" : "Exit Type / Reason:"}
             </Label>
             <div className="grid grid-cols-2 gap-2">
-              {/* 1. Sale */}
+              {/* 1. Depleted / Direct Archive (Default & Most Common) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setReason("depleted");
+                  setForceArchive(true);
+                }}
+                className={`p-2.5 rounded-xl border text-start flex items-center gap-2.5 transition-all col-span-2 sm:col-span-1 ${
+                  reason === "depleted"
+                    ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100 font-semibold ring-1 ring-amber-500 shadow-xs"
+                    : "border-border hover:bg-muted/50 text-foreground"
+                }`}
+              >
+                <div className={`p-2 rounded-lg shrink-0 ${reason === "depleted" ? "bg-amber-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                  <Archive className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold">{t("depletedZeroBalance")}</span>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded font-medium">
+                      {lang === "ar" ? "افتراضي" : "Default"}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground leading-tight truncate">
+                    {lang === "ar" ? "أرشفة الصنف ونقله لقائمة الأرشيف" : "Move item to archive"}
+                  </div>
+                </div>
+              </button>
+
+              {/* 2. Sale */}
               <button
                 type="button"
                 onClick={() => {
                   setReason("sold");
-                  if (currentQty > 0 && (!exitQty || exitQty === "0")) {
-                    setExitQty(currentQty.toString());
-                  }
                 }}
                 className={`p-2.5 rounded-xl border text-start flex items-center gap-2.5 transition-all ${
                   reason === "sold"
@@ -209,25 +237,22 @@ export function StockExitArchiveDialog({
                     : "border-border hover:bg-muted/50 text-foreground"
                 }`}
               >
-                <div className={`p-2 rounded-lg ${reason === "sold" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <div className={`p-2 rounded-lg shrink-0 ${reason === "sold" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground"}`}>
                   <ShoppingCart className="size-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs font-bold">{t("saleToCustomer")}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">
-                    {lang === "ar" ? "بيع لعميل خارجي أو متجر" : "Customer / Market sale"}
+                  <div className="text-[10px] text-muted-foreground leading-tight truncate">
+                    {lang === "ar" ? "بيع لعميل (اختياري)" : "Sale to customer"}
                   </div>
                 </div>
               </button>
 
-              {/* 2. Transfer */}
+              {/* 3. Transfer */}
               <button
                 type="button"
                 onClick={() => {
                   setReason("transfer");
-                  if (currentQty > 0 && (!exitQty || exitQty === "0")) {
-                    setExitQty(currentQty.toString());
-                  }
                 }}
                 className={`p-2.5 rounded-xl border text-start flex items-center gap-2.5 transition-all ${
                   reason === "transfer"
@@ -235,25 +260,22 @@ export function StockExitArchiveDialog({
                     : "border-border hover:bg-muted/50 text-foreground"
                 }`}
               >
-                <div className={`p-2 rounded-lg ${reason === "transfer" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <div className={`p-2 rounded-lg shrink-0 ${reason === "transfer" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
                   <Truck className="size-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs font-bold">{t("transferWarehouse")}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">
-                    {lang === "ar" ? "تحويل لمخزن أو فرع آخر" : "To branch/warehouse"}
+                  <div className="text-[10px] text-muted-foreground leading-tight truncate">
+                    {lang === "ar" ? "تحويل لمخزن (اختياري)" : "Transfer to warehouse"}
                   </div>
                 </div>
               </button>
 
-              {/* 3. Distribution */}
+              {/* 4. Distribution */}
               <button
                 type="button"
                 onClick={() => {
                   setReason("distribution");
-                  if (currentQty > 0 && (!exitQty || exitQty === "0")) {
-                    setExitQty(currentQty.toString());
-                  }
                 }}
                 className={`p-2.5 rounded-xl border text-start flex items-center gap-2.5 transition-all ${
                   reason === "distribution"
@@ -261,51 +283,44 @@ export function StockExitArchiveDialog({
                     : "border-border hover:bg-muted/50 text-foreground"
                 }`}
               >
-                <div className={`p-2 rounded-lg ${reason === "distribution" ? "bg-purple-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <div className={`p-2 rounded-lg shrink-0 ${reason === "distribution" ? "bg-purple-600 text-white" : "bg-muted text-muted-foreground"}`}>
                   <Gift className="size-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs font-bold">{t("distributionSamples")}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">
-                    {lang === "ar" ? "توزيع عينات، هدايا، إهلاك" : "Samples, gifts, write-off"}
-                  </div>
-                </div>
-              </button>
-
-              {/* 4. Depleted / Direct Archive */}
-              <button
-                type="button"
-                onClick={() => {
-                  setReason("depleted");
-                  setExitQty(currentQty.toString());
-                  setForceArchive(true);
-                }}
-                className={`p-2.5 rounded-xl border text-start flex items-center gap-2.5 transition-all ${
-                  reason === "depleted"
-                    ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100 font-semibold ring-1 ring-amber-500 shadow-xs"
-                    : "border-border hover:bg-muted/50 text-foreground"
-                }`}
-              >
-                <div className={`p-2 rounded-lg ${reason === "depleted" ? "bg-amber-600 text-white" : "bg-muted text-muted-foreground"}`}>
-                  <PackageMinus className="size-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold">{t("depletedZeroBalance")}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">
-                    {lang === "ar" ? "انتهاء المخزون وأرشفة الصنف" : "Finished / Archive now"}
+                  <div className="text-[10px] text-muted-foreground leading-tight truncate">
+                    {lang === "ar" ? "عينات أو هدايا (اختياري)" : "Samples or gifts"}
                   </div>
                 </div>
               </button>
             </div>
           </div>
 
-          {/* Quantity to Exit */}
-          {currentQty > 0 && (
-            <div className="space-y-2 p-3.5 rounded-xl border border-border bg-card">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="exitQty" className="text-xs font-semibold text-foreground">
-                  {t("exitQuantity")} ({item.unit || "كجم"}):
-                </Label>
+          {/* Depleted Archive Information Banner */}
+          {reason === "depleted" && (
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200">
+              <Sparkles className="size-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-bold block">
+                  {lang === "ar" ? "أرشفة الصنف المباشرة:" : "Direct Archive:"}
+                </span>
+                <span>
+                  {lang === "ar"
+                    ? "سيتم نقل الصنف مباشرة إلى شاشة الأرشيف وحفظ كامل سجلاته وصوره دون حذفه، ودون الحاجة لإدخال أي بيانات إضافية."
+                    : "Item will move directly to the archive preserving all history, with no extra fields required."}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Quantity to Exit (Optional) */}
+          <div className="space-y-2 p-3.5 rounded-xl border border-border bg-card">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="exitQty" className="text-xs font-semibold text-foreground">
+                {t("exitQuantity")} ({item.unit || "كجم"}):{" "}
+                <span className="text-[11px] font-normal text-muted-foreground">({lang === "ar" ? "اختياري" : "Optional"})</span>
+              </Label>
+              {hasRecordedQty && currentQty > 0 && (
                 <div className="flex items-center gap-1.5">
                   <Button
                     type="button"
@@ -314,7 +329,7 @@ export function StockExitArchiveDialog({
                     onClick={() => handleQuickPercent(100)}
                     className="h-6 px-2 text-[10px] font-bold text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
                   >
-                    100% {lang === "ar" ? "بالكامل" : "All"}
+                    100% {lang === "ar" ? "الكل" : "All"}
                   </Button>
                   <Button
                     type="button"
@@ -335,44 +350,55 @@ export function StockExitArchiveDialog({
                     25%
                   </Button>
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div className="flex gap-2">
-                <Input
-                  id="exitQty"
-                  type="number"
-                  step="any"
-                  min="0"
-                  max={currentQty}
-                  value={exitQty}
-                  onChange={(e) => setExitQty(e.target.value)}
-                  placeholder="0.00"
-                  className="font-mono text-base font-bold h-10"
-                />
-              </div>
+            <div className="flex gap-2">
+              <Input
+                id="exitQty"
+                type="number"
+                step="any"
+                min="0"
+                value={exitQty}
+                onChange={(e) => setExitQty(e.target.value)}
+                placeholder={hasRecordedQty && currentQty > 0 ? currentQty.toString() : (lang === "ar" ? "اتركه فارغاً للأرشفة المباشرة" : "Leave empty to archive")}
+                className="font-mono text-base font-bold h-10"
+              />
+            </div>
 
-              {/* Remaining calculation banner */}
+            {hasRecordedQty && currentQty > 0 ? (
               <div className="flex items-center justify-between pt-1 text-[11px]">
                 <span className="text-muted-foreground">{t("remainingBalanceAfter")}:</span>
                 <span
                   className={`font-mono font-bold ${
-                    remainingQty === 0
-                      ? "text-destructive"
+                    remainingQty === 0 || forceArchive || reason === "depleted"
+                      ? "text-amber-600 dark:text-amber-400"
                       : "text-emerald-600 dark:text-emerald-400"
                   }`}
                 >
-                  {remainingQty} {item.unit || "كجم"}
+                  {forceArchive || reason === "depleted" ? 0 : remainingQty} {item.unit || "كجم"}
+                  {(forceArchive || reason === "depleted") && (
+                    <span className="ms-1.5 text-[10px] font-sans font-medium text-amber-600">
+                      ({lang === "ar" ? "أرشفة المخزون" : "Archived"})
+                    </span>
+                  )}
                 </span>
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {lang === "ar"
+                  ? "💡 الصنف مسجل بدون كمية محددة — يمكنك تركه فارغاً وسيتم نقله للأرشيف فوراً."
+                  : "💡 No initial quantity recorded — you can leave this empty to archive directly."}
+              </p>
+            )}
+          </div>
 
-          {/* Conditional Detail Fields */}
+          {/* Conditional Detail Fields (All 100% Optional) */}
           {reason === "sold" && (
             <div className="space-y-3 p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
               <div className="space-y-1">
                 <Label htmlFor="customerName" className="text-xs font-semibold text-foreground">
-                  {t("customerName")} <span className="text-destructive">*</span>
+                  {t("customerName")} ({lang === "ar" ? "اختياري" : "Optional"})
                 </Label>
                 <Input
                   id="customerName"
@@ -402,7 +428,7 @@ export function StockExitArchiveDialog({
             <div className="space-y-3 p-3.5 rounded-xl border border-blue-500/20 bg-blue-500/5">
               <div className="space-y-1">
                 <Label htmlFor="destWarehouse" className="text-xs font-semibold text-foreground">
-                  {t("destinationWarehouse")} <span className="text-destructive">*</span>
+                  {t("destinationWarehouse")} ({lang === "ar" ? "اختياري" : "Optional"})
                 </Label>
                 <Input
                   id="destWarehouse"
@@ -432,7 +458,7 @@ export function StockExitArchiveDialog({
             <div className="space-y-3 p-3.5 rounded-xl border border-purple-500/20 bg-purple-500/5">
               <div className="space-y-1">
                 <Label htmlFor="distRecipient" className="text-xs font-semibold text-foreground">
-                  {lang === "ar" ? "جهة التوزيع / الغرض:" : "Recipient / Purpose:"}
+                  {lang === "ar" ? "جهة التوزيع / الغرض (اختياري):" : "Recipient / Purpose (Optional):"}
                 </Label>
                 <Input
                   id="distRecipient"
@@ -445,7 +471,7 @@ export function StockExitArchiveDialog({
             </div>
           )}
 
-          {/* Notes */}
+          {/* Notes (Optional) */}
           <div className="space-y-1">
             <Label htmlFor="notes" className="text-xs font-semibold text-foreground">
               {t("archiveNotes")} ({lang === "ar" ? "اختياري" : "Optional"})
@@ -470,8 +496,8 @@ export function StockExitArchiveDialog({
                 </span>
                 <span>
                   {lang === "ar"
-                    ? "سينفد رصيد الصنف بالكامل (0)؛ سيتم نقله تلقائياً إلى قائمة الأرشيف لحفظ كافة سجلاته وتقاريره دون حذفه."
-                    : "Stock balance reaches 0; item will automatically move to the Archive to preserve history without deletion."}
+                    ? "سيتم نقل الصنف إلى قائمة الأرشيف لحفظ كافة سجلاته وتقاريره وصوره دون حذفه."
+                    : "Item will move to Archive preserving full history and photos without deletion."}
                 </span>
               </div>
             </div>
@@ -497,42 +523,41 @@ export function StockExitArchiveDialog({
               </div>
             </label>
           )}
+
+          {/* Dialog Action Buttons inside form for Enter key support */}
+          <DialogFooter className="p-0 pt-3 border-t border-border flex flex-row items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+              className="text-xs h-9 px-4"
+            >
+              {t("cancel")}
+            </Button>
+
+            <Button
+              type="submit"
+              size="sm"
+              disabled={loading || isInvalidQty}
+              className="text-xs font-bold h-9 px-5 bg-amber-700 hover:bg-amber-800 text-white gap-1.5 shadow-sm"
+            >
+              {loading ? (
+                <span>{lang === "ar" ? "جاري الحفظ..." : "Saving..."}</span>
+              ) : (
+                <>
+                  <CheckCircle2 className="size-4" />
+                  <span>
+                    {willDeplete || forceArchive || reason === "depleted" || !hasRecordedQty
+                      ? (lang === "ar" ? "تأكيد ونقل للأرشيف 📦" : "Confirm & Move to Archive 📦")
+                      : (lang === "ar" ? "تأكيد حركة الإخراج" : "Confirm Stock Exit")}
+                  </span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </form>
-
-        {/* Footer */}
-        <DialogFooter className="p-3 sm:p-4 border-t border-border bg-muted/20 flex flex-row items-center justify-end gap-2 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-            className="text-xs h-9 px-4"
-          >
-            {t("cancel")}
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSubmit}
-            disabled={loading || isInvalidQty}
-            className="text-xs font-bold h-9 px-5 bg-amber-700 hover:bg-amber-800 text-white gap-1.5 shadow-sm"
-          >
-            {loading ? (
-              <span>{lang === "ar" ? "جاري الحفظ..." : "Saving..."}</span>
-            ) : (
-              <>
-                <CheckCircle2 className="size-4" />
-                <span>
-                  {willDeplete || forceArchive
-                    ? (lang === "ar" ? "تأكيد الإخراج والأرشفة" : "Confirm Exit & Archive")
-                    : (lang === "ar" ? "تأكيد حركة الإخراج" : "Confirm Stock Exit")}
-                </span>
-              </>
-            )}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
