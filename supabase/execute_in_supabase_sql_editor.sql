@@ -154,3 +154,13 @@ CREATE POLICY "item photos update" ON storage.objects FOR UPDATE TO authenticate
 
 DROP POLICY IF EXISTS "item photos delete" ON storage.objects;
 CREATE POLICY "item photos delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'item-photos');
+
+-- 7. Items Archive Support
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS archived_reason text;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS archived_by uuid REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS archived_by_email text;
+CREATE INDEX IF NOT EXISTS idx_items_is_archived ON public.items (is_archived);
+CREATE INDEX IF NOT EXISTS idx_items_archived_at ON public.items (archived_at DESC);
+

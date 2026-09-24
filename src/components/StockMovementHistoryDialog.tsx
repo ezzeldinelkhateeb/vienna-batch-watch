@@ -1,6 +1,21 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { History, Factory, Search, Calendar, User, PackageCheck, ArrowDownRight, RefreshCw } from "lucide-react";
+import {
+  History,
+  Factory,
+  Search,
+  Calendar,
+  User,
+  PackageCheck,
+  ArrowDownRight,
+  RefreshCw,
+  ShoppingCart,
+  Truck,
+  Gift,
+  Archive,
+  RotateCcw,
+  Plus,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useRegisterBackModal } from "@/lib/modal-stack";
@@ -104,8 +119,8 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
             </DialogTitle>
             <DialogDescription className="text-white/80 text-xs mt-1">
               {lang === "ar"
-                ? "سجل وتاريخ عمليات الصرف إلى خطوط الإنتاج بالمصنع"
-                : "Historical record of raw material dispatches to factory production lines"}
+                ? "سجل وتاريخ عمليات الصرف إلى خطوط الإنتاج، والمبيعات، والتحويلات، وحركات الأرشيف"
+                : "Historical record of production dispatches, sales, transfers, and warehouse movements"}
             </DialogDescription>
           </DialogHeader>
 
@@ -116,7 +131,7 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
               <span className="font-bold text-white text-sm font-mono">{filteredMovements.length}</span>
             </div>
             <div>
-              <span className="text-white/70 block">{lang === "ar" ? "إجمالي المنصرف" : "Total Dispensed"}</span>
+              <span className="text-white/70 block">{lang === "ar" ? "إجمالي المنصرف / المخرج" : "Total Out"}</span>
               <span className="font-bold text-amber-300 text-sm font-mono">
                 {parseFloat(totalDispensedQty.toFixed(2))} {item?.unit || (lang === "ar" ? "وحدة" : "units")}
               </span>
@@ -157,72 +172,110 @@ export function StockMovementHistoryDialog({ open, onOpenChange, item }: Props) 
           ) : filteredMovements.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground">
               <PackageCheck className="size-8 mx-auto text-muted-foreground/40 mb-2" />
-              <p>{lang === "ar" ? "لا توجد حركات صرف مسجلة بعد." : "No dispatch movements recorded yet."}</p>
+              <p>{lang === "ar" ? "لا توجد حركات مسجلة بعد." : "No movements recorded yet."}</p>
             </div>
           ) : (
-            filteredMovements.map((movement) => (
-              <div
-                key={movement.id}
-                className="rounded-lg border border-border/80 bg-card p-3.5 shadow-sm hover:shadow transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-              >
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-sm text-foreground">
-                      {movement.item_name}
-                    </span>
-                    {movement.batch_number && (
-                      <span className="rounded bg-brand/10 text-brand px-2 py-0.5 text-[11px] font-mono font-medium">
-                        #{movement.batch_number}
-                      </span>
-                    )}
-                    <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
-                      <Factory className="size-3 text-brand" />
-                      <span>{movement.production_line}</span>
-                    </span>
-                  </div>
+            filteredMovements.map((movement) => {
+              const isSale = movement.movement_type === "sale";
+              const isTransfer = movement.movement_type === "transfer";
+              const isDist = movement.movement_type === "distribution";
+              const isArchive = movement.movement_type === "archive" || movement.movement_type === "depleted";
+              const isRestore = movement.movement_type === "restore";
 
-                  <div className="flex flex-wrap items-center gap-3 text-muted-foreground text-[11px]">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="size-3" />
-                      <span>{new Date(movement.created_at).toLocaleString("ar-EG")}</span>
-                    </span>
-                    {movement.recipient_name && (
+              let BadgeIcon = Factory;
+              let badgeColor = "bg-muted text-muted-foreground border-border/50";
+              let badgeLabel = movement.production_line;
+
+              if (isSale) {
+                BadgeIcon = ShoppingCart;
+                badgeColor = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+              } else if (isTransfer) {
+                BadgeIcon = Truck;
+                badgeColor = "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20";
+              } else if (isDist) {
+                BadgeIcon = Gift;
+                badgeColor = "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20";
+              } else if (isArchive) {
+                BadgeIcon = Archive;
+                badgeColor = "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
+              } else if (isRestore) {
+                BadgeIcon = RotateCcw;
+                badgeColor = "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20";
+              }
+
+              return (
+                <div
+                  key={movement.id}
+                  className="rounded-lg border border-border/80 bg-card p-3.5 shadow-sm hover:shadow transition-shadow flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-sm text-foreground">
+                        {movement.item_name}
+                      </span>
+                      {movement.batch_number && (
+                        <span className="rounded bg-brand/10 text-brand px-2 py-0.5 text-[11px] font-mono font-medium">
+                          #{movement.batch_number}
+                        </span>
+                      )}
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] flex items-center gap-1 font-medium border ${badgeColor}`}>
+                        <BadgeIcon className="size-3" />
+                        <span>{badgeLabel}</span>
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-muted-foreground text-[11px]">
                       <span className="flex items-center gap-1">
-                        <User className="size-3" />
-                        <span>{lang === "ar" ? "المستلم:" : "Recipient:"} {movement.recipient_name}</span>
+                        <Calendar className="size-3" />
+                        <span>{new Date(movement.created_at).toLocaleString("ar-EG")}</span>
                       </span>
-                    )}
-                    {movement.dispensed_by_email && (
-                      <span className="text-muted-foreground/70">
-                        ({movement.dispensed_by_email})
-                      </span>
+                      {movement.recipient_name && (
+                        <span className="flex items-center gap-1">
+                          <User className="size-3" />
+                          <span>{lang === "ar" ? "المستلم/الجهة:" : "Recipient:"} {movement.recipient_name}</span>
+                        </span>
+                      )}
+                      {movement.dispensed_by_email && (
+                        <span className="text-muted-foreground/70">
+                          ({movement.dispensed_by_email})
+                        </span>
+                      )}
+                    </div>
+
+                    {movement.notes && (
+                      <p className="rounded bg-muted/40 p-2 text-muted-foreground text-[11px] border border-border/40 mt-1">
+                        {movement.notes}
+                      </p>
                     )}
                   </div>
 
-                  {movement.notes && (
-                    <p className="rounded bg-muted/40 p-2 text-muted-foreground text-[11px] border border-border/40 mt-1">
-                      {movement.notes}
-                    </p>
-                  )}
-                </div>
-
-                {/* Numbers Pill */}
-                <div className="shrink-0 flex sm:flex-col items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-r sm:pr-4 border-border/60 pt-2 sm:pt-0">
-                  <div className="flex items-center gap-1 text-brand font-bold text-sm">
-                    <ArrowDownRight className="size-4" />
-                    <span>
-                      -{movement.quantity_dispensed} {movement.unit || "كجم"}
-                    </span>
+                  {/* Numbers Pill */}
+                  <div className="shrink-0 flex sm:flex-col items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-r sm:pr-4 border-border/60 pt-2 sm:pt-0">
+                    <div className={`flex items-center gap-1 font-bold text-sm ${isRestore ? "text-teal-600 dark:text-teal-400" : "text-brand"}`}>
+                      {isRestore ? (
+                        <>
+                          <Plus className="size-4" />
+                          <span>+{movement.remaining_quantity} {movement.unit || "كجم"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowDownRight className="size-4" />
+                          <span>
+                            -{movement.quantity_dispensed} {movement.unit || "كجم"}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      <span>{lang === "ar" ? "المتبقي:" : "Rem:"} </span>
+                      <span className="font-mono font-semibold text-foreground">
+                        {movement.remaining_quantity} {movement.unit || "كجم"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    <span>{lang === "ar" ? "المتبقي:" : "Rem:"} </span>
-                    <span className="font-mono font-semibold text-foreground">
-                      {movement.remaining_quantity} {movement.unit || "كجم"}
-                    </span>
-                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </DialogContent>

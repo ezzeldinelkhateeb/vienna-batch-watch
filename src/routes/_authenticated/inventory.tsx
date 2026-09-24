@@ -32,6 +32,8 @@ import {
   ClipboardCheck,
   Camera,
   Zap,
+  ShoppingCart,
+  Truck,
 } from "lucide-react";
 import { buildAlertMessage, buildDirectWhatsAppUrl } from "@/lib/whatsapp.shared";
 import { toast } from "sonner";
@@ -61,6 +63,9 @@ import { ProductImageThumbnail } from "@/components/ProductImageThumbnail";
 import { WhatsAppShareDialog } from "@/components/WhatsAppShareDialog";
 import { DispenseProductionDialog } from "@/components/DispenseProductionDialog";
 import { StockMovementHistoryDialog } from "@/components/StockMovementHistoryDialog";
+import { StockExitArchiveDialog } from "@/components/StockExitArchiveDialog";
+import { RestoreArchivedItemDialog } from "@/components/RestoreArchivedItemDialog";
+import { isItemArchived, getArchiveMeta } from "@/lib/archive";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +149,10 @@ function InventoryPage() {
   const [dispenseItem, setDispenseItem] = useState<ItemRow | null>(null);
   const [movementsItem, setMovementsItem] = useState<ItemRow | null | "all">(null);
   const [printLabelItem, setPrintLabelItem] = useState<ItemRow | null>(null);
+  const [inventoryTab, setInventoryTab] = useState<"active" | "archived">("active");
+  const [archiveReasonFilter, setArchiveReasonFilter] = useState<"all" | "sold" | "transfer" | "distribution" | "depleted" | "manual">("all");
+  const [exitArchiveItem, setExitArchiveItem] = useState<ItemRow | null>(null);
+  const [restoreItem, setRestoreItem] = useState<ItemRow | null>(null);
 
   const handleSetViewMode = (mode: "table" | "cards") => {
     setViewMode(mode);
@@ -201,12 +210,42 @@ function InventoryPage() {
       signedPhotoUrls(extractAllPhotoPaths((items.data ?? []).map((i) => i.photo_path))),
   });
 
+  // Split into Active Inventory and Archive
+  const { activeItems, archivedItems, archiveStats } = useMemo(() => {
+    const active: ItemRow[] = [];
+    const archived: ItemRow[] = [];
+    let sold = 0;
+    let transfer = 0;
+    let distribution = 0;
+    let depleted = 0;
+    let other = 0;
+
+    for (const it of items.data ?? []) {
+      if (isItemArchived(it)) {
+        archived.push(it);
+        const meta = getArchiveMeta(it, lang);
+        if (meta.reason === "sold") sold++;
+        else if (meta.reason === "transfer") transfer++;
+        else if (meta.reason === "distribution") distribution++;
+        else if (meta.reason === "depleted") depleted++;
+        else other++;
+      } else {
+        active.push(it);
+      }
+    }
+    return {
+      activeItems: active,
+      archivedItems: archived,
+      archiveStats: { sold, transfer, distribution, depleted, other, total: archived.length },
+    };
+  }, [items.data, lang]);
+
   // Calculate FEFO #1 priority for approved batches (earliest expiry for each material name)
   const fefoPriorityMap = useMemo(() => {
     const map = new Map<string, boolean>();
     const groups = new Map<string, ItemRow[]>();
 
-    for (const item of items.data ?? []) {
+    for (const item of activeItems) {
       if (item.qc_status === "approved" && daysUntil(item.expiry_date) >= 0) {
         const key = item.name.trim().toLowerCase();
         const list = groups.get(key) ?? [];
@@ -222,12 +261,12 @@ function InventoryPage() {
       }
     }
     return map;
-  }, [items.data]);
+  }, [activeItems]);
 
   // Groups of materials by name — returns { batches, totalQty, unit }
   const materialGroupsMap = useMemo(() => {
     const map = new Map<string, { batches: ItemRow[]; totalQty: number; unit: string }>();
-    for (const item of items.data ?? []) {
+    for (const item of activeItems) {
       const key = (item.name || "").trim().toLowerCase();
       if (!key) continue;
       const existing = map.get(key);
@@ -245,7 +284,7 @@ function InventoryPage() {
       }
     }
     return map;
-  }, [items.data]);
+  }, [activeItems]);
 
   // Storage locations list
   const storageLocations = useMemo(() => {
@@ -255,20 +294,20 @@ function InventoryPage() {
         set.add(loc.trim());
       }
     }
-    for (const item of items.data ?? []) {
+    for (const item of activeItems) {
       if (item.storage_location?.trim()) {
         set.add(item.storage_location.trim());
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [items.data, settings.data?.storage_locations]);
+  }, [activeItems, settings.data?.storage_locations]);
 
   const qcCounts = useMemo(() => {
     let quarantine = 0;
     let approved = 0;
     let rejected = 0;
     let fefo = 0;
-    for (const item of items.data ?? []) {
+    for (const item of activeItems) {
       const st = item.qc_status ?? "quarantine";
       if (st === "quarantine") quarantine++;
       else if (st === "approved") approved++;
@@ -277,11 +316,11 @@ function InventoryPage() {
       if (fefoPriorityMap.get(item.id)) fefo++;
     }
     return { quarantine, approved, rejected, fefo };
-  }, [items.data, fefoPriorityMap]);
+  }, [activeItems, fefoPriorityMap]);
 
   // Comprehensive KPIs for stock & inventory
   const kpis = useMemo(() => {
-    const all = items.data ?? [];
+    const all = activeItems;
     const totalBatches = all.length;
     const uniqueMaterials = new Set(all.map((i) => (i.name || "").trim().toLowerCase()).filter(Boolean)).size;
 
@@ -370,11 +409,11 @@ function InventoryPage() {
       unrecordedBatchesCount,
       otherUnits,
     };
-  }, [items.data, materialGroupsMap, thresholds]);
+  }, [activeItems, materialGroupsMap, thresholds]);
 
   // Next FEFO priority batch ready for dispensing to production
   const nextFefoItem = useMemo(() => {
-    const approved = (items.data ?? []).filter(
+    const approved = activeItems.filter(
       (i) =>
         i.qc_status === "approved" &&
         daysUntil(i.expiry_date) >= 0 &&
@@ -383,7 +422,7 @@ function InventoryPage() {
     if (approved.length === 0) return null;
     approved.sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
     return approved[0] ?? null;
-  }, [items.data]);
+  }, [activeItems]);
 
   // Current month string for monthly audit progress
   const currentMonthStr = useMemo(() => {
@@ -413,8 +452,8 @@ function InventoryPage() {
     kpis.totalBatches > 0 ? Math.round((reviewedBatchesCount / kpis.totalBatches) * 100) : 0;
 
   const photoVerifiedCount = useMemo(
-    () => (items.data ?? []).filter((i) => parsePhotos(i.photo_path).length > 0).length,
-    [items.data]
+    () => activeItems.filter((i) => parsePhotos(i.photo_path).length > 0).length,
+    [activeItems]
   );
 
   const hasActiveFilters =
@@ -476,7 +515,8 @@ function InventoryPage() {
   };
 
   const rows = useMemo(() => {
-    const list = (items.data ?? []).map((item) => {
+    const sourceList = inventoryTab === "active" ? activeItems : archivedItems;
+    const list = sourceList.map((item) => {
       const days = daysUntil(item.expiry_date);
       const isFefoFirst = !!fefoPriorityMap.get(item.id);
       const materialBatchCount = materialGroupsMap.get((item.name || "").trim().toLowerCase())?.batches?.length ?? 1;
@@ -487,17 +527,24 @@ function InventoryPage() {
 
     // 1. Filter
     const filtered = list.filter((r) => {
-      if (statusFilter !== "all") {
-        if (statusFilter === "urgent") {
-          if (r.status !== "critical" && r.status !== "expired") return false;
-        } else if (r.status !== statusFilter) {
-          return false;
+      if (inventoryTab === "active") {
+        if (statusFilter !== "all") {
+          if (statusFilter === "urgent") {
+            if (r.status !== "critical" && r.status !== "expired") return false;
+          } else if (r.status !== statusFilter) {
+            return false;
+          }
+        }
+        if (qcFilter !== "all" && (r.item.qc_status ?? "quarantine") !== qcFilter) return false;
+        if (fefoOnly && !r.isFefoFirst) return false;
+        if (multiBatchOnly && r.materialBatchCount <= 1) return false;
+        if (storageFilter !== "all" && (r.item.storage_location ?? "").trim() !== storageFilter) return false;
+      } else {
+        if (archiveReasonFilter !== "all") {
+          const meta = getArchiveMeta(r.item, lang);
+          if (meta.reason !== archiveReasonFilter) return false;
         }
       }
-      if (qcFilter !== "all" && (r.item.qc_status ?? "quarantine") !== qcFilter) return false;
-      if (fefoOnly && !r.isFefoFirst) return false;
-      if (multiBatchOnly && r.materialBatchCount <= 1) return false;
-      if (storageFilter !== "all" && (r.item.storage_location ?? "").trim() !== storageFilter) return false;
       if (q !== "") {
         const match =
           (r.item.item_code ?? "").toLowerCase().includes(q) ||
@@ -506,7 +553,8 @@ function InventoryPage() {
           (r.item.supplier ?? "").toLowerCase().includes(q) ||
           (r.item.storage_location ?? "").toLowerCase().includes(q) ||
           (r.item.notes ?? "").toLowerCase().includes(q) ||
-          (r.item.qc_notes ?? "").toLowerCase().includes(q);
+          (r.item.qc_notes ?? "").toLowerCase().includes(q) ||
+          (r.item.archived_reason ?? "").toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
@@ -514,6 +562,12 @@ function InventoryPage() {
 
     // 2. Sort
     filtered.sort((a, b) => {
+      if (inventoryTab === "archived") {
+        const dateA = a.item.archived_at ? new Date(a.item.archived_at).getTime() : 0;
+        const dateB = b.item.archived_at ? new Date(b.item.archived_at).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+      }
+
       if (sortMode === "alpha" || sortMode === "grouped_materials") {
         const nameComp = a.item.name.localeCompare(b.item.name, "ar", {
           sensitivity: "base",
@@ -552,7 +606,10 @@ function InventoryPage() {
 
     return filtered;
   }, [
-    items.data,
+    inventoryTab,
+    archiveReasonFilter,
+    activeItems,
+    archivedItems,
     search,
     statusFilter,
     qcFilter,
@@ -563,6 +620,7 @@ function InventoryPage() {
     fefoPriorityMap,
     materialGroupsMap,
     thresholds,
+    lang,
   ]);
 
   const counts = useMemo(() => {
@@ -573,11 +631,11 @@ function InventoryPage() {
       critical: 0,
       expired: 0,
     };
-    for (const item of items.data ?? []) {
+    for (const item of activeItems) {
       base[statusFor(daysUntil(item.expiry_date), thresholds)] += 1;
     }
     return base;
-  }, [items.data, thresholds]);
+  }, [activeItems, thresholds]);
 
   const exportCsv = () => {
     const header = [
@@ -620,7 +678,7 @@ function InventoryPage() {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `vienna-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `vienna-${inventoryTab === "archived" ? "archive-" : ""}inventory-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -643,6 +701,8 @@ function InventoryPage() {
         setBackupOpen(true);
       } else if (detail === "export-csv") {
         exportCsv();
+      } else if (detail === "view-archive") {
+        setInventoryTab("archived");
       }
     };
     window.addEventListener("vienna:action", handleViennaAction);
@@ -656,8 +716,160 @@ function InventoryPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-6 sm:px-6 pb-24 md:pb-10">
-        {/* Urgent Expiry Alert Banner */}
-        {hasUrgent && (
+        {/* Navigation Tabs: Active Stock vs Archive */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-3">
+          <div className="flex items-center gap-1.5 p-1 bg-muted/70 rounded-xl border border-border/60">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.vibrate?.(10);
+                setInventoryTab("active");
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                inventoryTab === "active"
+                  ? "bg-card text-foreground shadow-xs border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <PackageIcon className="size-4 text-brand" />
+              <span>{t("activeInventory")}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium bg-brand/10 text-brand">
+                {activeItems.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                navigator.vibrate?.(10);
+                setInventoryTab("archived");
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                inventoryTab === "archived"
+                  ? "bg-card text-foreground shadow-xs border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Archive className="size-4 text-amber-600" />
+              <span>{t("archivedInventory")}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                {archivedItems.length}
+              </span>
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {inventoryTab === "active"
+              ? (lang === "ar" ? "قائمة الخامات النشطة الحالية بالمصنع وتتبع الصلاحية" : "Active raw materials and expiry tracking")
+              : t("archiveTabDesc")}
+          </p>
+        </div>
+
+        {/* Archive Banner when on Archived tab */}
+        {inventoryTab === "archived" && (
+          <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
+                  <Archive className="size-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-foreground">
+                    {lang === "ar" ? "أرشيف الأصناف والمنتهية" : "Archived & Depleted Batches"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {lang === "ar"
+                      ? "كافة الأصناف التي تم بيعها، أو نقلها، أو نفاد مخزونها محفوظة هنا بسجلاتها دون حذفها"
+                      : "Finished, sold, or transferred batches stored with full history without data deletion"}
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMovementsItem("all")}
+                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <History className="size-3.5 text-brand" />
+                <span>{t("stockMovements")}</span>
+              </Button>
+            </div>
+
+            {/* Quick Archive Filter Buttons */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setArchiveReasonFilter("all")}
+                className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                  archiveReasonFilter === "all"
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs font-bold ring-1 ring-amber-600"
+                    : "bg-card/80 border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="text-[11px]">{lang === "ar" ? "كل المؤرشف:" : "All Archived:"}</span>
+                <span className="font-mono font-bold text-sm">{archiveStats.total}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveReasonFilter("sold")}
+                className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                  archiveReasonFilter === "sold"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs font-bold ring-1 ring-emerald-600"
+                    : "bg-card/80 border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="text-[11px] flex items-center gap-1">
+                  <ShoppingCart className="size-3" />
+                  <span>{lang === "ar" ? "تم البيع:" : "Sold:"}</span>
+                </span>
+                <span className="font-mono font-bold text-sm">{archiveStats.sold}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveReasonFilter("transfer")}
+                className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                  archiveReasonFilter === "transfer"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-xs font-bold ring-1 ring-blue-600"
+                    : "bg-card/80 border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="text-[11px] flex items-center gap-1">
+                  <Truck className="size-3" />
+                  <span>{lang === "ar" ? "تم النقل:" : "Transferred:"}</span>
+                </span>
+                <span className="font-mono font-bold text-sm">{archiveStats.transfer}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveReasonFilter("depleted")}
+                className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                  archiveReasonFilter === "depleted"
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs font-bold ring-1 ring-amber-600"
+                    : "bg-card/80 border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="text-[11px]">{lang === "ar" ? "نفاد المخزون:" : "Depleted:"}</span>
+                <span className="font-mono font-bold text-sm">{archiveStats.depleted}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiveReasonFilter("distribution")}
+                className={`p-2.5 rounded-lg border flex items-center justify-between transition-all ${
+                  archiveReasonFilter === "distribution"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-xs font-bold ring-1 ring-purple-600"
+                    : "bg-card/80 border-border text-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="text-[11px]">{lang === "ar" ? "توزيع وعينات:" : "Samples:"}</span>
+                <span className="font-mono font-bold text-sm">{archiveStats.distribution}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Urgent Expiry Alert Banner (Active inventory only) */}
+        {inventoryTab === "active" && hasUrgent && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-950 dark:text-red-200 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white shadow-sm">
@@ -690,8 +902,11 @@ function InventoryPage() {
           </div>
         )}
 
-        {/* Top Stock & Inventory KPI Overview */}
-        {enableKpis && (
+        {/* Active Inventory Only: KPI Overview, Quality Bar, FEFO Banner, Status Legend & Filter Pills */}
+        {inventoryTab === "active" && (
+          <>
+            {/* Top Stock & Inventory KPI Overview */}
+            {enableKpis && (
           <InventoryKpiOverview
             uniqueMaterials={kpis.uniqueMaterials}
             totalBatches={kpis.totalBatches}
@@ -1059,6 +1274,8 @@ function InventoryPage() {
             </button>
           )}
         </div>
+          </>
+        )}
 
         {/* Enhanced Toolbar: Sticky on Mobile for quick search & barcode scan */}
         <div className="sticky top-0 z-20 -mx-4 px-4 py-2.5 sm:static sm:mx-0 sm:px-0 sm:py-0 bg-background/95 backdrop-blur-md border-b sm:border-b-0 border-border/70 shadow-2xs sm:shadow-none flex flex-wrap items-center justify-between gap-2.5">
@@ -1244,9 +1461,45 @@ function InventoryPage() {
 
                   <div
                     className="relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md"
-                    style={{ borderTop: `4px solid var(--brand)` }}
+                    style={{ borderTop: `4px solid ${inventoryTab === "archived" ? "#d97706" : "var(--brand)"}` }}
                   >
                     <div className="space-y-3">
+                      {/* Archive Reason Banner (Archived Tab) */}
+                      {inventoryTab === "archived" && (() => {
+                        const meta = getArchiveMeta(item, lang);
+                        return (
+                          <div className={`flex items-center justify-between gap-2 rounded-lg border p-2 text-xs font-semibold ${meta.reasonBadgeColor}`}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Archive className="size-3.5 shrink-0" />
+                              <span className="truncate">{meta.reasonLabel}</span>
+                            </div>
+                            {meta.date && (
+                              <span className="text-[10px] font-mono opacity-80 shrink-0">
+                                {new Date(meta.date).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Depleted Stock Archive Prompt (Active Tab) */}
+                      {inventoryTab === "active" && canEditItems && (item.quantity != null && Number(item.quantity) <= 0) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.vibrate?.(10);
+                            setExitArchiveItem(item);
+                          }}
+                          className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200 hover:bg-amber-500/20 transition-colors text-start"
+                        >
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <Archive className="size-3.5 text-amber-600 shrink-0" />
+                            <span>{lang === "ar" ? "المخزون نفد (0) — نقل للأرشيف" : "Out of stock (0) — Move to Archive"}</span>
+                          </div>
+                          <span className="text-[11px] underline font-semibold shrink-0">{lang === "ar" ? "أرشفة الآن" : "Archive"}</span>
+                        </button>
+                      )}
+
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
@@ -1355,56 +1608,92 @@ function InventoryPage() {
                     </div>
 
                     <div className="mt-3.5 border-t border-border/80 pt-2.5 space-y-2">
-                      {/* Row 1: Primary Operations (فحص QC & صرف للإنتاج) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {canEditItems && (
+                      {/* Row 1: Primary Operations */}
+                      {inventoryTab === "active" ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {canEditItems && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full gap-1.5 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-bold shadow-2xs h-9"
+                              onClick={() => {
+                                navigator.vibrate?.(15);
+                                setQuickQcItem(item);
+                              }}
+                            >
+                              <ShieldCheck className="size-4 text-brand shrink-0" />
+                              <span className="truncate">{t("inspectQc")}</span>
+                            </Button>
+                          )}
+
+                          {canEditItems && enableDispense && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="w-full gap-1.5 text-xs bg-brand hover:bg-brand/90 text-white font-bold shadow-2xs h-9"
+                              onClick={() => {
+                                navigator.vibrate?.(15);
+                                setDispenseItem(item);
+                              }}
+                              title={t("dispenseToProduction")}
+                            >
+                              <Factory className="size-4 shrink-0" />
+                              <span className="truncate">{t("dispenseToProduction")}</span>
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {canEditItems && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full gap-1.5 text-xs border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 font-bold shadow-2xs h-9"
+                              onClick={() => {
+                                navigator.vibrate?.(15);
+                                setRestoreItem(item);
+                              }}
+                              title={t("restoreItem")}
+                            >
+                              <RotateCcw className="size-4 shrink-0" />
+                              <span className="truncate">{t("restoreItem")}</span>
+                            </Button>
+                          )}
+
                           <Button
                             size="sm"
                             variant="outline"
-                            className="w-full gap-1.5 text-xs border-brand/40 bg-brand/5 text-cocoa hover:bg-brand/10 font-bold shadow-2xs h-9"
+                            className="w-full gap-1.5 text-xs border-border bg-card text-foreground hover:bg-muted font-semibold shadow-2xs h-9"
                             onClick={() => {
-                              navigator.vibrate?.(15);
-                              setQuickQcItem(item);
+                              navigator.vibrate?.(10);
+                              setMovementsItem(item);
                             }}
+                            title={t("movementHistory")}
                           >
-                            <ShieldCheck className="size-4 text-brand shrink-0" />
-                            <span className="truncate">{t("inspectQc")}</span>
+                            <History className="size-4 text-brand shrink-0" />
+                            <span className="truncate">{t("movementHistory")}</span>
                           </Button>
-                        )}
-
-                        {canEditItems && enableDispense && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="w-full gap-1.5 text-xs bg-brand hover:bg-brand/90 text-white font-bold shadow-2xs h-9"
-                            onClick={() => {
-                              navigator.vibrate?.(15);
-                              setDispenseItem(item);
-                            }}
-                            title={t("dispenseToProduction")}
-                          >
-                            <Factory className="size-4 shrink-0" />
-                            <span className="truncate">{t("dispenseToProduction")}</span>
-                          </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       {/* Row 2: Secondary Tools Ribbon - All buttons preserved with comfortable touch targets */}
                       <div className="flex items-center justify-between gap-1 overflow-x-auto py-0.5 scrollbar-none">
-                        {/* Movements History */}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                          title={t("movementHistory")}
-                          onClick={() => {
-                            navigator.vibrate?.(10);
-                            setMovementsItem(item);
-                          }}
-                        >
-                          <History className="size-3.5 text-brand" />
-                          <span className="inline">{t("movementHistory")}</span>
-                        </Button>
+                        {/* Movements History (Active tab) */}
+                        {inventoryTab === "active" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-[11px] gap-1 text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                            title={t("movementHistory")}
+                            onClick={() => {
+                              navigator.vibrate?.(10);
+                              setMovementsItem(item);
+                            }}
+                          >
+                            <History className="size-3.5 text-brand" />
+                            <span className="inline">{t("movementHistory")}</span>
+                          </Button>
+                        )}
 
                         {/* Thermal Barcode Label */}
                         <Button
@@ -1435,6 +1724,23 @@ function InventoryPage() {
                           <MessageCircle className="size-3.5" />
                           <span className="inline">{lang === "ar" ? "واتساب" : "Share"}</span>
                         </Button>
+
+                        {/* Archive / Exit Action Button (Active items) */}
+                        {inventoryTab === "active" && canEditItems && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-[11px] gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 shrink-0"
+                            title={lang === "ar" ? "نقل للأرشيف / بيع / توزيع / نفاد" : "Archive / Exit / Sell"}
+                            onClick={() => {
+                              navigator.vibrate?.(10);
+                              setExitArchiveItem(item);
+                            }}
+                          >
+                            <Archive className="size-3.5 text-amber-600" />
+                            <span className="inline font-bold">{lang === "ar" ? "أرشفة" : "Archive"}</span>
+                          </Button>
+                        )}
 
                         {/* Edit */}
                         {canEditItems && (
@@ -1557,8 +1863,18 @@ function InventoryPage() {
                         className="border-t"
                         style={{ backgroundColor: STATUS_TINT[status] }}
                       >
-                        <td className="px-3 py-2">
-                          <StatusPill status={status} />
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {inventoryTab === "archived" ? (() => {
+                            const meta = getArchiveMeta(item, lang);
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${meta.reasonBadgeColor}`}>
+                                <Archive className="size-3 shrink-0" />
+                                <span>{meta.reasonLabel}</span>
+                              </span>
+                            );
+                          })() : (
+                            <StatusPill status={status} />
+                          )}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -1648,60 +1964,122 @@ function InventoryPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex gap-1">
-                            {canEditItems && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                aria-label={t("inspectQc")}
-                                title={t("inspectQc")}
-                                className="text-brand hover:text-brand hover:bg-brand/10"
-                                onClick={() => setQuickQcItem(item)}
-                              >
-                                <ShieldCheck className="size-4" />
-                              </Button>
+                            {inventoryTab === "active" ? (
+                              <>
+                                {canEditItems && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={t("inspectQc")}
+                                    title={t("inspectQc")}
+                                    className="text-brand hover:text-brand hover:bg-brand/10"
+                                    onClick={() => setQuickQcItem(item)}
+                                  >
+                                    <ShieldCheck className="size-4" />
+                                  </Button>
+                                )}
+                                {canEditItems && enableDispense && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={t("dispenseToProduction")}
+                                    title={t("dispenseToProduction")}
+                                    className="text-brand hover:bg-brand/15 hover:text-brand"
+                                    onClick={() => setDispenseItem(item)}
+                                  >
+                                    <Factory className="size-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={t("movementHistory")}
+                                  title={t("movementHistory")}
+                                  className="text-muted-foreground hover:text-foreground"
+                                  onClick={() => setMovementsItem(item)}
+                                >
+                                  <History className="size-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Label"}
+                                  title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
+                                  className="text-muted-foreground hover:text-brand"
+                                  onClick={() => setPrintLabelItem(item)}
+                                >
+                                  <Tag className="size-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={t("shareViaWhatsApp")}
+                                  title={t("shareViaWhatsApp")}
+                                  className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                                  onClick={() => shareItemOnWhatsApp(item)}
+                                >
+                                  <MessageCircle className="size-4" />
+                                </Button>
+                                {canEditItems && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={lang === "ar" ? "نقل للأرشيف / بيع / توزيع" : "Archive"}
+                                    title={lang === "ar" ? "نقل للأرشيف / بيع / توزيع / نفاد" : "Archive / Exit / Sell"}
+                                    className="text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                                    onClick={() => setExitArchiveItem(item)}
+                                  >
+                                    <Archive className="size-4" />
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {canEditItems && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={t("restoreItem")}
+                                    title={t("restoreItem")}
+                                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                                    onClick={() => setRestoreItem(item)}
+                                  >
+                                    <RotateCcw className="size-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={t("movementHistory")}
+                                  title={t("movementHistory")}
+                                  className="text-muted-foreground hover:text-foreground"
+                                  onClick={() => setMovementsItem(item)}
+                                >
+                                  <History className="size-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Label"}
+                                  title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
+                                  className="text-muted-foreground hover:text-brand"
+                                  onClick={() => setPrintLabelItem(item)}
+                                >
+                                  <Tag className="size-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={t("shareViaWhatsApp")}
+                                  title={t("shareViaWhatsApp")}
+                                  className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
+                                  onClick={() => shareItemOnWhatsApp(item)}
+                                >
+                                  <MessageCircle className="size-4" />
+                                </Button>
+                              </>
                             )}
-                            {canEditItems && enableDispense && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                aria-label={t("dispenseToProduction")}
-                                title={t("dispenseToProduction")}
-                                className="text-brand hover:bg-brand/15 hover:text-brand"
-                                onClick={() => setDispenseItem(item)}
-                              >
-                                <Factory className="size-4" />
-                              </Button>
-                            )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={t("movementHistory")}
-                              title={t("movementHistory")}
-                              className="text-muted-foreground hover:text-foreground"
-                              onClick={() => setMovementsItem(item)}
-                            >
-                              <History className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Label"}
-                              title={lang === "ar" ? "طباعة ملصق الباركود 🏷️" : "Print Barcode Label 🏷️"}
-                              className="text-muted-foreground hover:text-brand"
-                              onClick={() => setPrintLabelItem(item)}
-                            >
-                              <Tag className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={t("shareViaWhatsApp")}
-                              title={t("shareViaWhatsApp")}
-                              className="text-[#25D366] hover:text-[#128C7E] hover:bg-[#25D366]/10"
-                              onClick={() => shareItemOnWhatsApp(item)}
-                            >
-                              <MessageCircle className="size-4" />
-                            </Button>
+
                             {canEditItems && (
                               <Button
                                 size="icon"
@@ -1806,6 +2184,26 @@ function InventoryPage() {
         open={Boolean(printLabelItem)}
         onOpenChange={(open) => !open && setPrintLabelItem(null)}
         item={printLabelItem}
+      />
+
+      <StockExitArchiveDialog
+        open={Boolean(exitArchiveItem)}
+        onOpenChange={(open) => !open && setExitArchiveItem(null)}
+        item={exitArchiveItem}
+        onArchived={() => {
+          void queryClient.invalidateQueries({ queryKey: ["items"] });
+          void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+        }}
+      />
+
+      <RestoreArchivedItemDialog
+        open={Boolean(restoreItem)}
+        onOpenChange={(open) => !open && setRestoreItem(null)}
+        item={restoreItem}
+        onRestored={() => {
+          void queryClient.invalidateQueries({ queryKey: ["items"] });
+          void queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
+        }}
       />
 
       <MobileBottomNav

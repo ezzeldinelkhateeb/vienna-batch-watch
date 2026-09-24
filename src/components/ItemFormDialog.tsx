@@ -56,6 +56,11 @@ export interface ItemRow {
   storage_location?: string | null | undefined;
   qc_notes?: string | null | undefined;
   coa_number?: string | null | undefined;
+  is_archived?: boolean | null | undefined;
+  archived_at?: string | null | undefined;
+  archived_reason?: string | null | undefined;
+  archived_by?: string | null | undefined;
+  archived_by_email?: string | null | undefined;
 }
 
 interface FormState {
@@ -90,6 +95,27 @@ const empty: FormState = {
   coa_number: "",
 };
 
+function fromItem(i: ItemRow): FormState {
+  return {
+    item_code: i.item_code ?? "",
+    batch_number: i.batch_number ?? "",
+    name: i.name,
+    supplier: i.supplier ?? "",
+    production_date: i.production_date ?? "",
+    expiry_date: i.expiry_date,
+    quantity: i.quantity != null ? String(i.quantity) : "",
+    unit: i.unit ?? "",
+    notes: i.notes ?? "",
+    qc_status: i.qc_status ?? "quarantine",
+    storage_location: i.storage_location ?? "",
+    qc_notes: i.qc_notes ?? "",
+    coa_number: i.coa_number ?? "",
+  };
+}
+
+const DRAFT_KEY_NEW = "vienna_item_draft_new";
+const getDraftKeyEdit = (id: string) => `vienna_item_draft_edit_${id}`;
+
 interface FormPhotoItem {
   id: string;
   path?: string | undefined;
@@ -111,6 +137,7 @@ export function ItemFormDialog({
 }) {
   const { t, lang } = useI18n();
   const [form, setForm] = useState<FormState>(empty);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
   const [busy, setBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -128,28 +155,60 @@ export function ItemFormDialog({
   useRegisterBackModal(viewerOpen, () => setViewerOpen(false), "item-form-viewer");
   useRegisterBackModal(cameraModalOpen, () => setCameraModalOpen(false), "item-form-camera");
 
+  // Restore form and check for unsaved drafts on open
   useEffect(() => {
     if (!open) return;
     setCodeError(null);
-    setForm(
-      item
-        ? {
-            item_code: item.item_code ?? "",
-            batch_number: item.batch_number ?? "",
-            name: item.name,
-            supplier: item.supplier ?? "",
-            production_date: item.production_date ?? "",
-            expiry_date: item.expiry_date,
-            quantity: item.quantity != null ? String(item.quantity) : "",
-            unit: item.unit ?? "",
-            notes: item.notes ?? "",
-            qc_status: item.qc_status ?? "quarantine",
-            storage_location: item.storage_location ?? "",
-            qc_notes: item.qc_notes ?? "",
-            coa_number: item.coa_number ?? "",
+
+    if (item) {
+      // Editing an existing item: check if there is an unsaved edit draft for this item
+      const editDraftKey = getDraftKeyEdit(item.id);
+      const savedEdit = typeof window !== "undefined" ? localStorage.getItem(editDraftKey) : null;
+      if (savedEdit) {
+        try {
+          const parsed = JSON.parse(savedEdit);
+          if (parsed && typeof parsed === "object" && parsed.name !== undefined) {
+            setForm(parsed);
+            setHasRestoredDraft(true);
+          } else {
+            setForm(fromItem(item));
+            setHasRestoredDraft(false);
           }
-        : empty,
-    );
+        } catch {
+          setForm(fromItem(item));
+          setHasRestoredDraft(false);
+        }
+      } else {
+        setForm(fromItem(item));
+        setHasRestoredDraft(false);
+      }
+    } else {
+      // Adding a new item: check if there is a saved draft
+      const savedNew = typeof window !== "undefined" ? localStorage.getItem(DRAFT_KEY_NEW) : null;
+      if (savedNew) {
+        try {
+          const parsed = JSON.parse(savedNew);
+          const hasContent = Boolean(
+            parsed &&
+            typeof parsed === "object" &&
+            (parsed.name || parsed.item_code || parsed.quantity || parsed.expiry_date || parsed.supplier || parsed.batch_number)
+          );
+          if (hasContent) {
+            setForm({ ...empty, ...parsed });
+            setHasRestoredDraft(true);
+          } else {
+            setForm(empty);
+            setHasRestoredDraft(false);
+          }
+        } catch {
+          setForm(empty);
+          setHasRestoredDraft(false);
+        }
+      } else {
+        setForm(empty);
+        setHasRestoredDraft(false);
+      }
+    }
 
     // Load photos
     if (item?.photo_path) {
@@ -172,6 +231,61 @@ export function ItemFormDialog({
       setPhotos([]);
     }
   }, [open, item]);
+
+  // Auto-save form draft whenever values change while modal is open
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+
+    try {
+      if (item === null) {
+        // Only save if at least one meaningful field is filled
+        const hasContent = Boolean(
+          form.item_code.trim() ||
+          form.batch_number.trim() ||
+          form.name.trim() ||
+          form.supplier.trim() ||
+          form.production_date ||
+          form.expiry_date ||
+          form.quantity ||
+          form.notes.trim() ||
+          form.storage_location.trim() ||
+          form.qc_notes.trim() ||
+          form.coa_number.trim()
+        );
+        if (hasContent) {
+          localStorage.setItem(DRAFT_KEY_NEW, JSON.stringify(form));
+        } else {
+          localStorage.removeItem(DRAFT_KEY_NEW);
+        }
+      } else {
+        // Compare with original item to avoid saving unchanged state as draft
+        const original = fromItem(item);
+        const isModified = Object.keys(form).some(
+          (k) => form[k as keyof FormState] !== original[k as keyof FormState]
+        );
+        if (isModified) {
+          localStorage.setItem(getDraftKeyEdit(item.id), JSON.stringify(form));
+        } else {
+          localStorage.removeItem(getDraftKeyEdit(item.id));
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to auto-save item draft:", err);
+    }
+  }, [form, open, item]);
+
+  const handleClearDraft = () => {
+    if (typeof window === "undefined") return;
+    if (item === null) {
+      localStorage.removeItem(DRAFT_KEY_NEW);
+      setForm(empty);
+    } else {
+      localStorage.removeItem(getDraftKeyEdit(item.id));
+      setForm(fromItem(item));
+    }
+    setHasRestoredDraft(false);
+    toast.info(lang === "ar" ? "تم مسح المسودة والبدء من جديد" : "Draft cleared");
+  };
 
   const set = (key: keyof FormState) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -369,6 +483,15 @@ export function ItemFormDialog({
       }
 
       toast.success(t("saved"));
+      if (typeof window !== "undefined") {
+        if (item) {
+          localStorage.removeItem(getDraftKeyEdit(item.id));
+        } else {
+          localStorage.removeItem(DRAFT_KEY_NEW);
+        }
+      }
+      setHasRestoredDraft(false);
+      setForm(empty);
       onSaved();
       onOpenChange(false);
     } catch (err: unknown) {
@@ -402,12 +525,35 @@ export function ItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg p-0 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden">
+      <DialogContent
+        preventOutsideDismiss={true}
+        className="sm:max-w-lg p-0 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden"
+      >
         <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-5 pb-3 border-b border-border shrink-0 ltr:pe-12 rtl:ps-12">
           <DialogTitle>{item ? t("editItem") : t("addItem")}</DialogTitle>
         </DialogHeader>
 
         <form id="item-form" onSubmit={submit} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 overscroll-contain">
+          {/* Draft Restored Banner */}
+          {hasRestoredDraft && (
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-950 dark:text-amber-200 animate-in fade-in-50">
+              <div className="flex items-center gap-1.5 font-medium">
+                <span className="size-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span>
+                  {lang === "ar"
+                    ? "تم استرجاع بيانات المسودة غير المحفوظة تلقائياً ✅"
+                    : "Unsaved draft data restored automatically ✅"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                className="text-amber-800 dark:text-amber-300 underline hover:text-amber-950 font-bold text-[11px] cursor-pointer"
+              >
+                {lang === "ar" ? "مسح المسودة والبدء من جديد" : "Clear draft"}
+              </button>
+            </div>
+          )}
           {/* Item Code with Barcode Scanner button */}
           <div className="space-y-1.5">
             <Label htmlFor="item_code">

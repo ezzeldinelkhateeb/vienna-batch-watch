@@ -57,8 +57,22 @@ const DialogContent = React.forwardRef<
     hideDragHandle?: boolean;
     hideCloseButton?: boolean;
     disableSwipeToClose?: boolean;
+    preventOutsideDismiss?: boolean;
+    dismissThreshold?: number;
   }
->(({ className, children, hideDragHandle = false, hideCloseButton = false, disableSwipeToClose = false, style, ...props }, ref) => {
+>(({
+  className,
+  children,
+  hideDragHandle = false,
+  hideCloseButton = false,
+  disableSwipeToClose = false,
+  preventOutsideDismiss = false,
+  dismissThreshold = 140,
+  style,
+  onPointerDownOutside,
+  onInteractOutside,
+  ...props
+}, ref) => {
   const context = React.useContext(DialogContext);
   const internalId = React.useId();
   const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -106,32 +120,22 @@ const DialogContent = React.forwardRef<
   );
 
   // Touch handlers for swipe-down-to-dismiss gesture
+  // STRICT RULE: Drag-to-dismiss is ONLY allowed when starting touch directly on the top drag handle bar!
+  // Any touch inside the form or content will NEVER drag or dismiss the modal.
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (disableSwipeToClose || e.touches.length !== 1) return;
     const touch = e.touches[0];
     const target = e.target as HTMLElement;
 
-    // Direct drag handle touch has highest priority
+    // Strict requirement: Only touches starting on the top drag handle can drag down to dismiss
     const isHandle = Boolean(target.closest('[data-drag-handle="true"]'));
-
-    // Check if target is inside an internally scrollable child
-    let scrollParent: HTMLElement | null = target;
-    let scrollTop = 0;
-    while (scrollParent && scrollParent !== contentRef.current) {
-      const computedStyle = window.getComputedStyle(scrollParent);
-      if (
-        (computedStyle.overflowY === "auto" || computedStyle.overflowY === "scroll") &&
-        scrollParent.scrollHeight > scrollParent.clientHeight
-      ) {
-        scrollTop = scrollParent.scrollTop;
-        break;
-      }
-      scrollParent = scrollParent.parentElement;
+    if (!isHandle) {
+      isEligibleForDragRef.current = false;
+      touchStartRef.current = null;
+      return;
     }
 
-    // Eligible if on handle OR scrollable child is already at the very top
-    isEligibleForDragRef.current = isHandle || scrollTop <= 0;
-
+    isEligibleForDragRef.current = true;
     touchStartRef.current = {
       y: touch.clientY,
       x: touch.clientX,
@@ -151,14 +155,16 @@ const DialogContent = React.forwardRef<
       return;
     }
 
-    // Only drag downwards
+    // Only drag downwards from handle with deliberate threshold (requires > 12px)
     if (deltaY > 0) {
-      if (!isDragging && deltaY > 6) {
+      if (!isDragging && deltaY > 12) {
         setIsDragging(true);
       }
-      if (isDragging || deltaY > 6) {
+      if (isDragging || deltaY > 12) {
         if (e.cancelable) e.preventDefault();
-        const damping = deltaY > 150 ? 150 + (deltaY - 150) * 0.5 : deltaY;
+        // Progressive damping for a solid, deliberate tactile feel
+        const effectiveY = deltaY - 12;
+        const damping = effectiveY > 160 ? 160 + (effectiveY - 160) * 0.4 : effectiveY;
         setTranslateY(damping);
       }
     } else if (isDragging) {
@@ -174,16 +180,22 @@ const DialogContent = React.forwardRef<
       const elapsed = Math.max(1, Date.now() - touchStartRef.current.time);
       const velocity = translateY / elapsed;
 
-      // Close if dragged past 70px or flicked down rapidly
-      if (translateY > 70 || (translateY > 30 && velocity > 0.4)) {
-        setTranslateY(window.innerHeight || 600);
+      // Close ONLY if dragged down firmly past dismissThreshold (default 140px) or high velocity flick (> 90px & velocity > 0.85)
+      const isFirmPull = translateY >= dismissThreshold;
+      const isFastFlick = translateY > 90 && velocity > 0.85;
+
+      if (isFirmPull || isFastFlick) {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate(15);
+        }
+        setTranslateY(window.innerHeight || 700);
         setTimeout(() => {
           triggerClose();
           setTranslateY(0);
           setIsDragging(false);
-        }, 180);
+        }, 190);
       } else {
-        // Bounce back up
+        // Bounce back up smoothly
         setTranslateY(0);
         setIsDragging(false);
       }
@@ -202,10 +214,22 @@ const DialogContent = React.forwardRef<
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
+        onPointerDownOutside={(e) => {
+          if (preventOutsideDismiss) {
+            e.preventDefault();
+          }
+          onPointerDownOutside?.(e);
+        }}
+        onInteractOutside={(e) => {
+          if (preventOutsideDismiss) {
+            e.preventDefault();
+          }
+          onInteractOutside?.(e);
+        }}
         style={{
           ...style,
           transform: translateY > 0 ? `translate3d(0, ${translateY}px, 0)` : undefined,
-          transition: isDragging ? "none" : "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)",
+          transition: isDragging ? "none" : "transform 0.24s cubic-bezier(0.18, 0.89, 0.32, 1.15)",
         }}
         className={cn(
           // Mobile first: Docked bottom sheet, bounded below notch/status-bar with safe-area
@@ -221,10 +245,10 @@ const DialogContent = React.forwardRef<
         {!hideDragHandle && (
           <div
             data-drag-handle="true"
-            className="sm:hidden flex flex-col items-center justify-center -mt-2 pb-2.5 pt-0.5 w-full shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-            aria-hidden="true"
+            className="sm:hidden flex flex-col items-center justify-center -mt-2 pb-3 pt-1.5 w-full shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
+            aria-label="Drag down firmly to close"
           >
-            <div className="h-1.5 w-12 rounded-full bg-muted-foreground/35 hover:bg-muted-foreground/50 transition-colors" />
+            <div className="h-1.5 w-14 rounded-full bg-muted-foreground/40 hover:bg-muted-foreground/60 transition-colors" />
           </div>
         )}
 

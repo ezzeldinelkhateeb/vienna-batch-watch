@@ -5,6 +5,9 @@ export type ActivityActionType =
   | "item_update"
   | "item_delete"
   | "stock_dispense"
+  | "item_archive"
+  | "item_restore"
+  | "stock_exit"
   | "qc_status_change"
   | "app_lock_toggle"
   | "settings_update";

@@ -70,6 +70,11 @@ export type Database = {
           supplier: string | null;
           unit: string | null;
           updated_at: string;
+          is_archived?: boolean | null;
+          archived_at?: string | null;
+          archived_reason?: string | null;
+          archived_by?: string | null;
+          archived_by_email?: string | null;
         };
         Insert: {
           batch_number?: string | null;
@@ -93,6 +98,11 @@ export type Database = {
           supplier?: string | null;
           unit?: string | null;
           updated_at?: string;
+          is_archived?: boolean | null;
+          archived_at?: string | null;
+          archived_reason?: string | null;
+          archived_by?: string | null;
+          archived_by_email?: string | null;
         };
         Update: {
           batch_number?: string | null;
@@ -116,6 +126,11 @@ export type Database = {
           supplier?: string | null;
           unit?: string | null;
           updated_at?: string;
+          is_archived?: boolean | null;
+          archived_at?: string | null;
+          archived_reason?: string | null;
+          archived_by?: string | null;
+          archived_by_email?: string | null;
         };
         Relationships: [];
       };

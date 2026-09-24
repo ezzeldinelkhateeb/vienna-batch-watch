@@ -20,6 +20,7 @@ import {
   User,
   Sparkles,
   ExternalLink,
+  Archive,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/lib/i18n";
@@ -229,6 +230,20 @@ export function AppNavigationDrawer() {
                 <ArrowIcon className="size-4 opacity-60" />
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => handleAction("view-archive")}
+              className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold hover:bg-muted text-foreground transition-all text-start"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-600">
+                  <Archive className="size-4" />
+                </div>
+                <span>{lang === "ar" ? "أرشيف الأصناف والمنتهية" : "Archived & Depleted Batches"}</span>
+              </div>
+              <ArrowIcon className="size-4 opacity-60" />
+            </button>
           </div>
 
           {/* Section 2: QC Reports & Actions */}

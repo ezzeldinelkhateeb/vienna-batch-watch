@@ -10,6 +10,7 @@ import { useRegisterBackModal } from "@/lib/modal-stack";
 import { daysUntil } from "@/lib/status";
 import { countdownText } from "@/lib/format";
 import { type ItemRow } from "@/components/ItemFormDialog";
+import { stripArchiveTag } from "@/lib/archive";
 import {
   Dialog,
   DialogContent,
@@ -113,28 +114,69 @@ export function DispenseProductionDialog({
     setLoading(true);
     try {
       const activeLine = customLine.trim() || selectedLine;
+      const shouldArchive = remainingQty === 0;
+      const nowIso = new Date().toISOString();
+      const cleanOldNotes = stripArchiveTag(item.notes);
+      const updatedNotes = shouldArchive
+        ? (cleanOldNotes ? `${cleanOldNotes}\n[ARCHIVED:depleted:${nowIso}:${user?.email || ""}:]` : `[ARCHIVED:depleted:${nowIso}:${user?.email || ""}:]`)
+        : cleanOldNotes;
 
-      // 1. Update items table with remaining quantity
+      // 1. Update items table with remaining quantity (and archive flags if 0)
+      const itemPayload: Record<string, any> = {
+        quantity: remainingQty,
+        notes: updatedNotes || null,
+        updated_at: nowIso,
+        ...(shouldArchive
+          ? {
+              is_archived: true,
+              archived_at: nowIso,
+              archived_reason: "depleted",
+              archived_by: user?.id || null,
+              archived_by_email: user?.email || null,
+            }
+          : {}),
+      };
+
       const { error: updateErr } = await supabase
         .from("items")
-        .update({ quantity: remainingQty })
+        .update(itemPayload)
         .eq("id", item.id);
 
-      if (updateErr) throw updateErr;
+      if (updateErr) {
+        if (
+          updateErr.message?.includes("is_archived") ||
+          updateErr.code === "42703" ||
+          updateErr.message?.includes("schema cache")
+        ) {
+          const { error: fbErr } = await supabase
+            .from("items")
+            .update({
+              quantity: remainingQty,
+              notes: updatedNotes || null,
+              updated_at: nowIso,
+            })
+            .eq("id", item.id);
+          if (fbErr) throw fbErr;
+        } else {
+          throw updateErr;
+        }
+      }
 
       // 2. Insert record into stock_movements
       const { error: movementErr } = await supabase.from("stock_movements").insert({
         item_id: item.id,
         item_name: item.name,
         batch_number: item.batch_number || null,
-        movement_type: "production_dispense",
+        movement_type: shouldArchive ? "depleted" : "production_dispense",
         quantity_dispensed: numDispenseQty,
         unit: item.unit || "كجم",
         previous_quantity: currentQty,
         remaining_quantity: remainingQty,
         production_line: activeLine,
         recipient_name: recipient.trim() || null,
-        notes: notes.trim() || null,
+        notes: shouldArchive
+          ? `${notes.trim() ? notes.trim() + " | " : ""}نفاد المخزون بالكامل ونقل الصنف للأرشيف`
+          : (notes.trim() || null),
         dispensed_by: user?.id || null,
         dispensed_by_email: user?.email || null,
       });
@@ -148,13 +190,17 @@ export function DispenseProductionDialog({
       }
 
       toast.success(
-        lang === "ar"
-          ? `تم صرف ${numDispenseQty} ${item.unit || "كجم"} لـ ${activeLine} بنجاح`
-          : `Dispensed ${numDispenseQty} ${item.unit || "kg"} to ${activeLine} successfully`,
+        shouldArchive
+          ? (lang === "ar"
+              ? `تم صرف كامل الكمية ونقل الصنف "${item.name}" إلى الأرشيف بنجاح 📦`
+              : `All stock dispensed; "${item.name}" moved to Archive 📦`)
+          : (lang === "ar"
+              ? `تم صرف ${numDispenseQty} ${item.unit || "كجم"} لـ ${activeLine} بنجاح`
+              : `Dispensed ${numDispenseQty} ${item.unit || "kg"} to ${activeLine} successfully`)
       );
 
       void logActivity({
-        action_type: "stock_dispense",
+        action_type: shouldArchive ? "item_archive" : "stock_dispense",
         entity_id: item.id,
         entity_name: `${item.name} (${item.batch_number || "No Batch"})`,
         details: {
@@ -164,6 +210,7 @@ export function DispenseProductionDialog({
           production_line: activeLine,
           recipient: recipient.trim() || null,
           notes: notes.trim() || null,
+          was_archived: shouldArchive,
         },
       });
 
@@ -181,7 +228,10 @@ export function DispenseProductionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden bg-background flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
+      <DialogContent
+        preventOutsideDismiss={true}
+        className="max-w-lg p-0 overflow-hidden bg-background flex flex-col max-h-[92dvh] sm:max-h-[90vh]"
+      >
         {/* Header Bar (Pinned at top) */}
         <div className="bg-gradient-to-r from-cocoa to-brand p-4 sm:p-5 ltr:pe-10 rtl:ps-10 text-white shrink-0">
           <div className="flex items-center justify-between gap-2">
@@ -374,6 +424,18 @@ export function DispenseProductionDialog({
                 )}
               </span>
             </div>
+
+            {/* Smart Auto-Archive Notice */}
+            {remainingQty === 0 && !isInvalidQty && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                <Sparkles className="size-4 shrink-0 mt-0.5 text-amber-600" />
+                <span>
+                  {lang === "ar"
+                    ? "💡 سينفد رصيد هذه الخامة بالكامل (0)؛ سيتم نقل الصنف تلقائياً إلى الأرشيف لحفظ بياناته وسجلاته التاريخية دون حذفه."
+                    : "💡 Stock will be fully depleted (0); item will automatically move to Archive to preserve history without deletion."}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Recipient / Technician Name */}
